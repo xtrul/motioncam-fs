@@ -40,11 +40,16 @@ set(PROJECT_SOURCES
         ui/mainwindow.ui
 )
 
+qt_add_resources(PROJECT_SOURCES resources.qrc)
+
 if(WIN32)
     list(APPEND PROJECT_SOURCES
+        resources/app.rc
+
         src/win/fusefilesystemimpl_win.cpp
         src/win/virtualizationInstance.cpp
         src/win/dirInfo.cpp
+
         include/win/dirInfo.h
         include/win/fusefilesystemimpl_win.h
         include/win/virtualizationInstance.h)

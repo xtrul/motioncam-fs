@@ -43,17 +43,46 @@ namespace {
         return lcv::utf_to_utf<char>(std::wstring(ws == nullptr ? L"" : ws));
     }
 
+    void updatePlaceHolder(PRJ_PLACEHOLDER_INFO& placeholderInfo, const Entry& entry, const FileRenderOptions options, int draftScale) {
+        placeholderInfo.FileBasicInfo.IsDirectory = entry.type == EntryType::DIRECTORY_ENTRY;
+        placeholderInfo.FileBasicInfo.FileSize = entry.size;
+        placeholderInfo.FileBasicInfo.FileAttributes =
+            FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_VIRTUAL;
+
+        // Store content id
+        placeholderInfo.VersionInfo.ContentID[0] = static_cast<UINT8>(options & 0xFF);
+        placeholderInfo.VersionInfo.ContentID[1] = static_cast<UINT8>((options >> 8)  & 0xFF);
+        placeholderInfo.VersionInfo.ContentID[2] = static_cast<UINT8>((options >> 16) & 0xFF);
+        placeholderInfo.VersionInfo.ContentID[3] = static_cast<UINT8>((options >> 24) & 0xFF);
+        placeholderInfo.VersionInfo.ContentID[4] = static_cast<UINT8>(draftScale);
+
+        // Use current time
+        FILETIME currentTime;
+        LARGE_INTEGER currentTimeLargeInteger;
+
+        GetSystemTimeAsFileTime(&currentTime);
+
+        currentTimeLargeInteger.LowPart = currentTime.dwLowDateTime;
+        currentTimeLargeInteger.HighPart = currentTime.dwHighDateTime;
+
+        placeholderInfo.FileBasicInfo.CreationTime = currentTimeLargeInteger;
+        placeholderInfo.FileBasicInfo.LastAccessTime = currentTimeLargeInteger;
+        placeholderInfo.FileBasicInfo.LastWriteTime = currentTimeLargeInteger;
+        placeholderInfo.FileBasicInfo.ChangeTime = currentTimeLargeInteger;
+    }
+
 class Session : public VirtualizationInstance {
 public:
     Session(
         FileRenderOptions options,
+        int draftScale,
         const std::string& srcFile,
         const std::string& dstPath);
 
     ~Session();
 
 public:
-    void updateOptions(FileRenderOptions options);
+    void updateOptions(FileRenderOptions options, int draftScale);
 
 protected:
     HRESULT StartDirEnum(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ const GUID* EnumerationId) override;
@@ -79,6 +108,7 @@ protected:
 
 private:
     FileRenderOptions mOptions;
+    int mDraftScale;
     std::mutex mOpLock;
     std::unique_ptr<VirtualFileSystemImpl_MCRAW> mFs;
     std::map<GUID, std::unique_ptr<DirInfo>, GUIDComparer> mActiveEnumSessions;
@@ -86,10 +116,12 @@ private:
 
 Session::Session(
     FileRenderOptions options,
+    int draftScale,
     const std::string& srcFile,
     const std::string& dstPath) :
     mOptions(options),
-    mFs(std::make_unique<VirtualFileSystemImpl_MCRAW>(options, srcFile))
+    mDraftScale(draftScale),
+    mFs(std::make_unique<VirtualFileSystemImpl_MCRAW>(options, draftScale, srcFile))
 {
     SetOptionalMethods(OptionalMethods::Notify);
 
@@ -130,14 +162,12 @@ Session::~Session() {
     Stop();
 }
 
-void Session::updateOptions(FileRenderOptions options) {
-    if(mOptions == options)
-        return;
-
+void Session::updateOptions(FileRenderOptions options, int draftScale) {
     mOptions = options;
+    mDraftScale = draftScale;
 
     // Tell file system about new options
-    mFs->updateOptions(options);
+    mFs->updateOptions(options, draftScale);
 
     // We need to clear out the cache
     auto files = mFs->listFiles();
@@ -152,14 +182,33 @@ void Session::updateOptions(FileRenderOptions options) {
         PRJ_UPDATE_ALLOW_READ_ONLY;
 
     for(auto& e : files) {
+        if(e.type != EntryType::FILE_ENTRY)
+            continue;
+
         auto fullPath = e.getFullPath().string();
 
-        hr = PrjDeleteFile(_instanceHandle, fromUTF8(fullPath).c_str(), updateFlags, &failureReason);
+        // hr = PrjDeleteFile(_instanceHandle, fromUTF8(fullPath).c_str(), updateFlags, &failureReason);
 
-        // Ignore file not found errors
-        if(FAILED(hr) && hr != HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))
-            spdlog::error("Failed to refresh cache entry {} (error: 0x{:08x}, reason: {})",
-                fullPath, static_cast<unsigned int>(hr), static_cast<unsigned int>(failureReason));
+        // Only DNG items need to be updated with options changes
+        if(boost::ends_with(e.name, "dng")) {
+            PRJ_PLACEHOLDER_INFO placeholderInfo = {};
+
+            updatePlaceHolder(placeholderInfo, e, options, draftScale);
+
+            hr = PrjUpdateFileIfNeeded(
+                _instanceHandle,
+                fromUTF8(fullPath).c_str(),
+                &placeholderInfo,
+                sizeof(placeholderInfo),
+                PRJ_UPDATE_ALLOW_DIRTY_METADATA | PRJ_UPDATE_ALLOW_DIRTY_DATA | PRJ_UPDATE_ALLOW_READ_ONLY,
+                &failureReason
+            );
+
+            // Ignore file not found errors
+            if(failureReason != PRJ_UPDATE_FAILURE_CAUSE_NONE)
+                spdlog::error("Failed to refresh cache entry {} (error: 0x{:08x}, reason: {})",
+                              fullPath, static_cast<unsigned int>(hr), static_cast<unsigned int>(failureReason));
+        }
     }
 }
 
@@ -279,16 +328,7 @@ HRESULT Session::GetPlaceholderInfo(_In_ const PRJ_CALLBACK_DATA* CallbackData) 
 
     PRJ_PLACEHOLDER_INFO placeholderInfo = {};
 
-    placeholderInfo.FileBasicInfo.IsDirectory = entry.type == EntryType::DIRECTORY_ENTRY;
-    placeholderInfo.FileBasicInfo.FileSize = entry.size;    
-    placeholderInfo.FileBasicInfo.FileAttributes =
-        FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_VIRTUAL;
-
-    // Store content id
-    placeholderInfo.VersionInfo.ContentID[0] = (UINT8)( mOptions & 0xFF);
-    placeholderInfo.VersionInfo.ContentID[1] = (UINT8)((mOptions >> 8)  & 0xFF);
-    placeholderInfo.VersionInfo.ContentID[2] = (UINT8)((mOptions >> 16) & 0xFF);
-    placeholderInfo.VersionInfo.ContentID[3] = (UINT8)((mOptions >> 24) & 0xFF);
+    updatePlaceHolder(placeholderInfo, entry, mOptions, mDraftScale);
 
     // Create the on-disk placeholder.
     HRESULT hr = WritePlaceholderInfo(
@@ -472,7 +512,7 @@ FuseFileSystemImpl_Win::FuseFileSystemImpl_Win() :
     setupLogging();
 }
 
-MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, const std::string& srcFile, const std::string& dstPath) {
+MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) {
     fs::path srcPath(srcFile);
     std::string extension = srcPath.extension().string();
 
@@ -482,7 +522,7 @@ MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, const std::stri
         auto mountId = mNextMountId++;
 
         try {
-            mMountedFiles[mountId] = std::make_unique<Session>(options, srcFile, dstPath);
+            mMountedFiles[mountId] = std::make_unique<Session>(options, draftScale, srcFile, dstPath);
         }
         catch(std::runtime_error& e) {
             spdlog::error("Failed to mount {} to {} (error: {})", srcFile, dstPath, e.what());
@@ -502,12 +542,13 @@ void FuseFileSystemImpl_Win::unmount(MountId mountId) {
     mMountedFiles.erase(mountId);
 }
 
-void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options) {
+void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
     auto it = mMountedFiles.find(mountId);
     if(it == mMountedFiles.end())
         return;
 
-    dynamic_cast<Session*>(mMountedFiles[mountId].get())->updateOptions(options);
+    dynamic_cast<Session*>(mMountedFiles[mountId].get())->updateOptions(
+        options, draftScale);
 }
 
 } // namespace motioncam

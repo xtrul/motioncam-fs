@@ -1,6 +1,7 @@
 #include "VirtualFileSystemImpl_MCRAW.h"
 #include "CameraFrameMetadata.h"
 #include "CameraMetadata.h"
+#include "Measure.h"
 #include "Utils.h"
 #include "AudioWriter.h"
 
@@ -21,7 +22,6 @@
 namespace motioncam {
 
 namespace {
-    constexpr auto DRAFT_SCALE = 2;
     constexpr auto IO_THREADS = 4;
 
 #ifdef _WIN32
@@ -116,20 +116,13 @@ IconSize=16
         return oss.str();
     }
 
-    int getScaleFromOptions(FileRenderOptions options) {
-        if(options & RENDER_OPT_DRAFT)
-            return DRAFT_SCALE;
-
-        return 1;
-    }
-
     void syncAudio(Timestamp videoTimestamp, std::vector<AudioChunk>& audioChunks, int sampleRate, int numChannels) {
         // Calculate drift between the video and audio
-        auto audioVideoDriftMs = (videoTimestamp - audioChunks[0].first) / 1000;
+        auto audioVideoDriftMs = (audioChunks[0].first - videoTimestamp) * 1e-6f;
 
         if(audioVideoDriftMs > 0) {
             // Calculate how many audio frames to remove
-            int audioFramesToRemove = static_cast<int>(audioVideoDriftMs * sampleRate / 1000);
+            int audioFramesToRemove = static_cast<int>(std::round(audioVideoDriftMs * sampleRate / 1000));
             int samplesToRemove = audioFramesToRemove * numChannels;
 
             // Remove samples from the beginning of audio chunks
@@ -158,7 +151,7 @@ IconSize=16
             // Otherwise video starts before audio, add silence
             auto silenceDuration = -audioVideoDriftMs; // Make positive
 
-            int silenceFrames = static_cast<int>(silenceDuration * sampleRate / 1000);
+            int silenceFrames = static_cast<int>(std::round(silenceDuration * sampleRate / 1000));
             int silenceSamples = silenceFrames * numChannels;
 
             // Create silence chunk at the beginning
@@ -174,16 +167,24 @@ IconSize=16
             }
         }
     }
+
+    int getScaleFromOptions(FileRenderOptions options, int draftScale) {
+        if(options & RENDER_OPT_DRAFT)
+            return draftScale;
+
+        return 1;
+    }
 }
 
 VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
-    FileRenderOptions options, const std::string& file) :
+    FileRenderOptions options, int draftScale, const std::string& file) :
         mIoThreadPool(std::make_unique<BS::thread_pool>(IO_THREADS)),
         mProcessingThreadPool(std::make_unique<BS::thread_pool>()),
         mSrcPath(file),
         mBaseName(extractFilenameWithoutExtension(file)),
         mTypicalDngSize(0),
-        mFps(0) {
+        mFps(0),
+        mDraftScale(draftScale) {
 
     init(options);
 }
@@ -219,7 +220,7 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
         mFps,
         0,
         options,
-        getScaleFromOptions(options));
+        getScaleFromOptions(options, mDraftScale));
 
     mTypicalDngSize = dngData->size();
 
@@ -241,7 +242,6 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
     // Generate and add audio (TODO: We're loading all the audio into memory + trim to sync with video)
     Entry audioEntry;
 
-    typedef std::pair<Timestamp, std::vector<int16_t>> AudioChunk;
     std::vector<AudioChunk> audioChunks;
     decoder.loadAudio(audioChunks);
 
@@ -343,9 +343,10 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
 
     // Use processing thread pool to generate DNG
     auto sharableFuture = frameDataFuture.share();
+    const auto fps = mFps;
+    const auto draftScale = mDraftScale;
 
-    const float fps = mFps;
-    auto generateTask = [sharableFuture, fps, options, pos, len, dst, result]() {
+    auto generateTask = [sharableFuture, fps, draftScale, options, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
@@ -360,7 +361,7 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
                 fps,
                 frameIndex,
                 options,
-                getScaleFromOptions(options));
+                getScaleFromOptions(options, draftScale));
 
             if(dngData && pos < dngData->size()) {
                 // Calculate length to copy
@@ -426,7 +427,9 @@ size_t VirtualFileSystemImpl_MCRAW::readFile(
     return 0;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
+    mDraftScale = draftScale;
+
     init(options);
 }
 

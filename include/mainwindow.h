@@ -28,16 +28,23 @@ protected:
 
 private slots:
     void onRenderSettingsChanged(const Qt::CheckState &state);
+    void onDraftModeQualityChanged(int index);
     void onSetCacheFolder(bool checked);
 
     void playFile(const QString& path);
     void removeFile(QWidget* fileWidget);
 
 private:
+    void saveSettings();
+    void restoreSettings();
+    void updateUi();
+
+private:
     Ui::MainWindow *ui;
     std::unique_ptr<motioncam::IFuseFileSystem> mFuseFilesystem;
     QList<motioncam::MountId> mMountedFiles;
     QString mCacheRootFolder;
+    int mDraftQuality;
 };
 
 #endif // MAINWINDOW_H

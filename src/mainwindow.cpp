@@ -9,12 +9,16 @@
 #include <QProcess>
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QSettings>
 
 #ifdef _WIN32
 #include "win/FuseFileSystemImpl_Win.h"
 #endif
 
 namespace {
+    constexpr auto PACKAGE_NAME = "com.motioncam";
+    constexpr auto APP_NAME = "MotionCam FS";
+
     motioncam::FileRenderOptions getRenderOptions(Ui::MainWindow& ui) {
         motioncam::FileRenderOptions options = motioncam::RENDER_OPT_NONE;
 
@@ -34,6 +38,7 @@ namespace {
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , mDraftQuality(1)
 {
     ui->setupUi(this);
 
@@ -41,20 +46,60 @@ MainWindow::MainWindow(QWidget *parent)
     ui->dragAndDropScrollArea->setAcceptDrops(true);
     ui->dragAndDropScrollArea->installEventFilter(this);
 
+    restoreSettings();
+
     // Connect to widgets
     connect(ui->draftModeCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
     connect(ui->vignetteCorrectionCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
     connect(ui->scaleRawCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
+    connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
     connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
 
 #ifdef _WIN32
     mFuseFilesystem = std::make_unique<motioncam::FuseFileSystemImpl_Win>();
-#endif
+#endif    
 }
 
 MainWindow::~MainWindow() {
+    saveSettings();
+
     delete ui;
+}
+
+void MainWindow::saveSettings() {
+    QSettings settings(PACKAGE_NAME, APP_NAME);
+
+    settings.setValue("draftMode", ui->draftModeCheckBox->checkState() == Qt::CheckState::Checked);
+    settings.setValue("applyVignetteCorrection", ui->vignetteCorrectionCheckBox->checkState() == Qt::CheckState::Checked);
+    settings.setValue("scaleRaw", ui->scaleRawCheckBox->checkState() == Qt::CheckState::Checked);
+    settings.setValue("cachePath", mCacheRootFolder);
+    settings.setValue("draftQuality", mDraftQuality);
+}
+
+void MainWindow::restoreSettings() {
+    QSettings settings(PACKAGE_NAME, APP_NAME);
+
+    ui->draftModeCheckBox->setCheckState(
+        settings.value("draftMode").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
+
+    ui->vignetteCorrectionCheckBox->setCheckState(
+        settings.value("applyVignetteCorrection").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
+
+    ui->scaleRawCheckBox->setCheckState(
+        settings.value("scaleRaw").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
+
+    mCacheRootFolder = settings.value("cachePath").toString();    
+    mDraftQuality = std::max(1, settings.value("draftQuality").toInt());
+
+    if(mDraftQuality == 2)
+        ui->draftQuality->setCurrentIndex(0);
+    else if(mDraftQuality == 4)
+        ui->draftQuality->setCurrentIndex(1);
+    else if(mDraftQuality == 8)
+        ui->draftQuality->setCurrentIndex(2);
+
+    updateUi();
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
@@ -106,7 +151,7 @@ void MainWindow::mountFile(const QString& filePath) {
 
     try {
         mountId = mFuseFilesystem->mount(
-            getRenderOptions(*ui), filePath.toStdString(), dstPath.toStdString());
+            getRenderOptions(*ui), mDraftQuality, filePath.toStdString(), dstPath.toStdString());
     }
     catch(std::runtime_error& e) {
         QMessageBox::critical(this, "Error", QString("There was an error mounting the file. (error: %1)").arg(e.what()));
@@ -195,14 +240,43 @@ void MainWindow::removeFile(QWidget* fileWidget) {
         mFuseFilesystem->unmount(mountId);
 }
 
+void MainWindow::updateUi() {
+    // Draft quality only enabled when draft mode is on
+    if(ui->draftModeCheckBox->checkState() == Qt::CheckState::Checked)
+        ui->draftQuality->setEnabled(true);
+    else
+        ui->draftQuality->setEnabled(false);
+
+    // Scale raw only enabled when vignette correction is on
+    if(ui->vignetteCorrectionCheckBox->checkState() == Qt::CheckState::Checked)
+        ui->scaleRawCheckBox->setEnabled(true);
+    else
+        ui->scaleRawCheckBox->setEnabled(false);
+
+    ui->cacheFolderLabel->setText(mCacheRootFolder);
+}
+
 void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
     auto it = mMountedFiles.begin();
     auto renderOptions = getRenderOptions(*ui);
 
+    updateUi();
+
     while(it != mMountedFiles.end()) {
-        mFuseFilesystem->updateOptions(*it, renderOptions);
+        mFuseFilesystem->updateOptions(*it, renderOptions, mDraftQuality);
         ++it;
     }
+}
+
+void MainWindow::onDraftModeQualityChanged(int index) {
+    if(index == 0)
+        mDraftQuality = 2;
+    else if(index == 1)
+        mDraftQuality = 4;
+    else if(index == 2)
+        mDraftQuality = 8;
+
+    onRenderSettingsChanged(Qt::CheckState::Checked);
 }
 
 void MainWindow::onSetCacheFolder(bool checked) {

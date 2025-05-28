@@ -5,6 +5,8 @@
 #include <QCommandLineParser>
 #include <QMessageBox>
 #include <QTimer>
+#include <QFileInfo>
+#include <QDirIterator>
 
 int main(int argc, char *argv[])
 {
@@ -14,6 +16,7 @@ int main(int argc, char *argv[])
     app.setApplicationName("MotionCam Fuse");
     app.setApplicationVersion("1.0");
     app.setOrganizationName("MotionCam");
+    app.setWindowIcon(QIcon(":/assets/app_icon.png"));
 
     // Parse command line arguments
     QCommandLineParser parser;
