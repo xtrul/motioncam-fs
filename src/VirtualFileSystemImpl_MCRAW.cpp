@@ -1,54 +1,28 @@
 #include "VirtualFileSystemImpl_MCRAW.h"
-#include "LRUCache.h"
-#include "Measure.h"
+#include "CameraFrameMetadata.h"
+#include "CameraMetadata.h"
+#include "Utils.h"
+#include "AudioWriter.h"
 
 #include <motioncam/Decoder.hpp>
 
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/iostreams/stream.hpp>
-#include <boost/iostreams/device/back_inserter.hpp>
 
 #include <BS_thread_pool.hpp>
+#include <spdlog/spdlog.h>
+#include <audiofile/AudioFile.h>
 
 #include <algorithm>
 #include <sstream>
-
-#define TINY_DNG_WRITER_IMPLEMENTATION 1
-
-#include <tinydng/tiny_dng_writer.h>
+#include <tuple>
 
 namespace motioncam {
 
 namespace {
     constexpr auto DRAFT_SCALE = 2;
-
-    enum DngIlluminant {
-        lsUnknown					=  0,
-        lsDaylight					=  1,
-        lsFluorescent				=  2,
-        lsTungsten					=  3,
-        lsFlash						=  4,
-        lsFineWeather				=  9,
-        lsCloudyWeather				= 10,
-        lsShade						= 11,
-        lsDaylightFluorescent		= 12,		// D  5700 - 7100K
-        lsDayWhiteFluorescent		= 13,		// N  4600 - 5500K
-        lsCoolWhiteFluorescent		= 14,		// W  3800 - 4500K
-        lsWhiteFluorescent			= 15,		// WW 3250 - 3800K
-        lsWarmWhiteFluorescent		= 16,		// L  2600 - 3250K
-        lsStandardLightA			= 17,
-        lsStandardLightB			= 18,
-        lsStandardLightC			= 19,
-        lsD55						= 20,
-        lsD65						= 21,
-        lsD75						= 22,
-        lsD50						= 23,
-        lsISOStudioTungsten			= 24,
-
-        lsOther						= 255
-    };
+    constexpr auto IO_THREADS = 4;
 
 #ifdef _WIN32
     constexpr std::string_view DESKTOP_INI = R"([.ShellClassInfo]
@@ -142,25 +116,6 @@ IconSize=16
         return oss.str();
     }
 
-    int getColorIlluminant(const std::string& value) {
-        if(value == "standarda")
-            return lsStandardLightA;
-        else if(value == "standardb")
-            return lsStandardLightB;
-        else if(value == "standardc")
-            return lsStandardLightC;
-        else if(value == "d50")
-            return lsD50;
-        else if(value == "d55")
-            return lsD55;
-        else if(value == "d65")
-            return lsD65;
-        else if(value == "d75")
-            return lsD75;
-        else
-            return lsUnknown;
-    }
-
     int getScaleFromOptions(FileRenderOptions options) {
         if(options & RENDER_OPT_DRAFT)
             return DRAFT_SCALE;
@@ -168,236 +123,107 @@ IconSize=16
         return 1;
     }
 
-    void createProxyDngInPlace(
-        std::vector<uint8_t>& data,
-        uint32_t& inOutWidth,
-        uint32_t& inOutHeight,
-        uint32_t scale = 2)
-    {
-        if (scale < 2)
-            return;
+    void syncAudio(Timestamp videoTimestamp, std::vector<AudioChunk>& audioChunks, int sampleRate, int numChannels) {
+        // Calculate drift between the video and audio
+        auto audioVideoDriftMs = (videoTimestamp - audioChunks[0].first) / 1000;
 
-        // Ensure even scale for downscaling
-        scale = (scale / 2) * 2;
+        if(audioVideoDriftMs > 0) {
+            // Calculate how many audio frames to remove
+            int audioFramesToRemove = static_cast<int>(audioVideoDriftMs * sampleRate / 1000);
+            int samplesToRemove = audioFramesToRemove * numChannels;
 
-        // Calculate new dimensions
-        uint32_t newWidth = inOutWidth / scale;
-        uint32_t newHeight = inOutHeight / scale;
+            // Remove samples from the beginning of audio chunks
+            int samplesRemoved = 0;
+            auto it = audioChunks.begin();
 
-        // Ensure even dimensions for Bayer pattern
-        newWidth = (newWidth / 2) * 2;
-        newHeight = (newHeight / 4) * 4;
+            while(it != audioChunks.end() && samplesRemoved < samplesToRemove) {
+                int remainingSamplesToRemove = samplesToRemove - samplesRemoved;
 
-        uint32_t originalWidth = inOutWidth;
-        uint32_t dstOffset = 0;
+                if(it->second.size() <= remainingSamplesToRemove) {
+                    // Remove entire chunk
+                    samplesRemoved += it->second.size();
+                    it = audioChunks.erase(it);
+                }
+                else {
+                    // Trim partial chunk from the beginning
+                    it->second.erase(it->second.begin(), it->second.begin() + remainingSamplesToRemove);
 
-        // Reinterpret the input data as uint16_t for reading
-        uint16_t* srcData = reinterpret_cast<uint16_t*>(data.data());
-
-        // Process the image by copying and packing 2x2 Bayer blocks
-        for (auto y = 0; y < newHeight; y += 2) {
-            for (auto x = 0; x < newWidth; x += 2) {
-                // Get the source coordinates (scaled)
-                uint32_t srcY = y * scale;
-                uint32_t srcX = x * scale;
-
-                // Copy the 2x2 Bayer block
-                srcData[dstOffset]                 = srcData[srcY * originalWidth + srcX];
-                srcData[dstOffset + 1]             = srcData[srcY * originalWidth + srcX + 1];
-                srcData[dstOffset + newWidth]      = srcData[(srcY + 1) * originalWidth + srcX];
-                srcData[dstOffset + newWidth + 1]  = srcData[(srcY + 1) * originalWidth + srcX + 1];
-
-                dstOffset += 2;
-            }
-
-            dstOffset += newWidth;
-        }
-
-        data.resize(sizeof(uint16_t) * newWidth * newHeight);
-
-        // Update dimensions
-        inOutWidth = newWidth;
-        inOutHeight = newHeight;
-    }
-
-    void encodeTo10Bit(
-        std::vector<uint8_t>& data,
-        uint32_t& width,
-        uint32_t& height)
-    {
-        Measure m("encodeTo10Bit");
-
-        uint16_t* srcPtr = reinterpret_cast<uint16_t*>(data.data());
-        uint8_t* dstPtr = data.data();
-
-        for(int y = 0; y < height; y++) {
-            for(int x = 0; x < width; x+=4) {
-                const uint16_t p0 = srcPtr[0];
-                const uint16_t p1 = srcPtr[1];
-                const uint16_t p2 = srcPtr[2];
-                const uint16_t p3 = srcPtr[3];
-
-                dstPtr[0] = p0 >> 2;
-                dstPtr[1] = ((p0 & 0x03) << 6) | (p1 >> 4);
-                dstPtr[2] = ((p1 & 0x0F) << 4) | (p2 >> 6);
-                dstPtr[3] = ((p2 & 0x3F) << 2) | (p3 >> 8);
-                dstPtr[4] = p3 & 0xFF;
-
-                srcPtr += 4;
-                dstPtr += 5;
+                    // Update timestamp for the trimmed chunk
+                    it->first += static_cast<Timestamp>(remainingSamplesToRemove * 1000 / sampleRate);
+                    break;
+                }
             }
         }
+        else {
+            // Otherwise video starts before audio, add silence
+            auto silenceDuration = -audioVideoDriftMs; // Make positive
 
-        // Resize to fit new data
-        auto newSize = dstPtr - data.data();
+            int silenceFrames = static_cast<int>(silenceDuration * sampleRate / 1000);
+            int silenceSamples = silenceFrames * numChannels;
 
-        data.resize(newSize);
-    }
+            // Create silence chunk at the beginning
+            std::vector<int16_t> silenceData(silenceSamples, 0);
+            AudioChunk silenceChunk = std::make_pair(videoTimestamp, silenceData);
 
-    std::shared_ptr<std::vector<char>> generateDng(
-        std::vector<uint8_t>& data,
-        const nlohmann::json& metadata,
-        const nlohmann::json& containerMetadata,
-        const int scale=1)
-    {
-        Measure m("generateDng");
+            // Insert silence at the beginning
+            audioChunks.insert(audioChunks.begin(), silenceChunk);
 
-        unsigned int width = metadata["width"];
-        unsigned int height = metadata["height"];
-
-        createProxyDngInPlace(data, width, height, scale);
-
-        encodeTo10Bit(data, width, height);
-
-        std::vector<float> asShotNeutral = metadata["asShotNeutral"];
-
-        std::vector<uint16_t> blackLevel = containerMetadata["blackLevel"];
-        double whiteLevel = containerMetadata["whiteLevel"];
-        std::string sensorArrangement = containerMetadata["sensorArrangment"];
-        std::vector<float> colorMatrix1 = containerMetadata["colorMatrix1"];
-        std::vector<float> colorMatrix2 = containerMetadata["colorMatrix2"];
-        std::vector<float> forwardMatrix1 = containerMetadata["forwardMatrix1"];
-        std::vector<float> forwardMatrix2 = containerMetadata["forwardMatrix2"];
-
-        std::string colorIlluminant1 = containerMetadata["colorIlluminant1"];
-        std::string colorIlluminant2 = containerMetadata["colorIlluminant2"];
-
-        // Create first frame
-        tinydngwriter::DNGImage dng;
-
-        dng.SetBigEndian(false);
-        dng.SetDNGVersion(1, 4, 0, 0);
-        dng.SetDNGBackwardVersion(1, 1, 0, 0);
-        dng.SetImageData(reinterpret_cast<const unsigned char*>(data.data()), data.size());
-        dng.SetImageWidth(width);
-        dng.SetImageLength(height);
-        dng.SetPlanarConfig(tinydngwriter::PLANARCONFIG_CONTIG);
-        dng.SetPhotometric(tinydngwriter::PHOTOMETRIC_CFA);
-        dng.SetRowsPerStrip(height);
-        dng.SetSamplesPerPixel(1);
-        dng.SetCFARepeatPatternDim(2, 2);
-
-        dng.SetBlackLevelRepeatDim(2, 2);
-        dng.SetBlackLevel(4, blackLevel.data());
-        dng.SetWhiteLevel(whiteLevel);
-        dng.SetCompression(tinydngwriter::COMPRESSION_NONE);
-
-        std::vector<uint8_t> cfa;
-
-        if(sensorArrangement == "rggb")
-            cfa = { 0, 1, 1, 2 };
-        else if(sensorArrangement == "bggr")
-            cfa = { 2, 1, 1, 0 };
-        else if(sensorArrangement == "grbg")
-            cfa = { 1, 0, 2, 1 };
-        else if(sensorArrangement == "gbrg")
-            cfa = { 1, 2, 0, 1 };
-        else
-            throw std::runtime_error("Invalid sensor arrangement");
-
-        dng.SetCFAPattern(4, cfa.data());
-
-        // Rectangular
-        dng.SetCFALayout(1);
-
-        const uint16_t bps[1] = { 10 };
-        dng.SetBitsPerSample(1, bps);
-
-        dng.SetColorMatrix1(3, colorMatrix1.data());
-        dng.SetColorMatrix2(3, colorMatrix2.data());
-
-        dng.SetForwardMatrix1(3, forwardMatrix1.data());
-        dng.SetForwardMatrix2(3, forwardMatrix2.data());
-
-        dng.SetAsShotNeutral(3, asShotNeutral.data());
-
-        dng.SetCalibrationIlluminant1(getColorIlluminant(colorIlluminant1));
-        dng.SetCalibrationIlluminant2(getColorIlluminant(colorIlluminant2));
-
-        dng.SetUniqueCameraModel("MotionCam");
-        dng.SetSubfileType();
-
-        const uint32_t activeArea[4] = { 0, 0, height, width };
-        dng.SetActiveArea(&activeArea[0]);
-
-        // Write DNG
-        std::string err;
-
-        tinydngwriter::DNGWriter writer(false);
-
-        writer.AddImage(&dng);
-
-        // Save to memory
-        auto output = std::make_shared<std::vector<char>>();
-
-        // Reserve enough to fit the data
-        output->reserve(width*height*sizeof(uint16_t) + 512*1024);
-
-        boost::iostreams::back_insert_device<std::vector<char>> sink(*output);
-        boost::iostreams::stream<boost::iostreams::back_insert_device<std::vector<char>>> stream(sink);
-
-        writer.WriteToFile(stream, &err);
-
-        return output;
+            // Update timestamps of existing chunks
+            for(auto it = audioChunks.begin() + 1; it != audioChunks.end(); ++it) {
+                it->first += silenceDuration;
+            }
+        }
     }
 }
 
 VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
-    FileRenderOptions options, LRUCache& cache, const std::string& file) :
-        mCache(cache),
+    FileRenderOptions options, const std::string& file) :
+        mIoThreadPool(std::make_unique<BS::thread_pool>(IO_THREADS)),
+        mProcessingThreadPool(std::make_unique<BS::thread_pool>()),
         mSrcPath(file),
         mBaseName(extractFilenameWithoutExtension(file)),
         mTypicalDngSize(0),
-        mDecoder(std::make_unique<Decoder>(file)) {
+        mFps(0) {
 
     init(options);
 }
 
-
 void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
-    auto frames = mDecoder->getFrames();
+    Decoder decoder(mSrcPath);
+    auto frames = decoder.getFrames();
     std::sort(frames.begin(), frames.end());
 
     if(frames.empty())
         return;
 
-    spdlog::debug("VirtualFileSystemImpl_MCRAW::init(options={})", static_cast<unsigned int>(options));
+    spdlog::debug("VirtualFileSystemImpl_MCRAW::init(options={})", optionsToString(options));
 
     // Clear everything
-    mCache.clear();
     mFiles.clear();
+
+    mFps = calculateFrameRate(frames);
 
     // Calculate typical DNG size that we can use for all files
     std::vector<uint8_t> data;
     nlohmann::json metadata;
 
-    mDecoder->loadFrame(frames[0], data, metadata);
+    decoder.loadFrame(frames[0], data, metadata);
 
-    auto dngData = generateDng(data, metadata, mDecoder->getContainerMetadata(), getScaleFromOptions(options));
+    auto cameraConfig = CameraConfiguration::parse(decoder.getContainerMetadata());
+    auto cameraFrameMetadata = CameraFrameMetadata::parse(metadata);
+
+    auto dngData = utils::generateDng(
+        data,
+        cameraFrameMetadata,
+        cameraConfig,
+        mFps,
+        0,
+        options,
+        getScaleFromOptions(options));
+
     mTypicalDngSize = dngData->size();
 
     // Generate file entries
-    auto fps = calculateFrameRate(frames);
     int lastPts = 0;
 
     mFiles.reserve(frames.size()*2);
@@ -412,166 +238,192 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
     mFiles.emplace_back(desktopIni);
 #endif
 
+    // Generate and add audio (TODO: We're loading all the audio into memory + trim to sync with video)
+    Entry audioEntry;
+
+    typedef std::pair<Timestamp, std::vector<int16_t>> AudioChunk;
+    std::vector<AudioChunk> audioChunks;
+    decoder.loadAudio(audioChunks);
+
+    if(!audioChunks.empty()) {
+        auto fpsFraction = utils::toFraction(mFps);
+        AudioWriter audioWriter(mAudioFile, decoder.numAudioChannels(), decoder.audioSampleRateHz(), fpsFraction.first, fpsFraction.second);
+
+        // Sync the audio to the video
+        syncAudio(
+            frames[0],
+            audioChunks,
+            decoder.audioSampleRateHz(),
+            decoder.numAudioChannels());
+
+        for(auto& x : audioChunks)
+            audioWriter.write(x.second, x.second.size() / decoder.numAudioChannels());
+    }
+
+    if(!mAudioFile.empty()) {
+        audioEntry.type = EntryType::FILE_ENTRY;
+        audioEntry.size = mAudioFile.size();
+        audioEntry.name = "audio.wav";
+
+        mFiles.emplace_back(audioEntry);
+    }
+
     // Add video frames
     for(auto& x : frames) {
-        int pts = getFrameNumberFromTimestamp(x, frames[0], fps);
+        int pts = getFrameNumberFromTimestamp(x, frames[0], mFps);
 
         // Duplicate frames to account for dropped frames
         while(lastPts < pts) {
             Entry entry;
 
+            // Add main entry
             entry.type = EntryType::FILE_ENTRY;
             entry.size = mTypicalDngSize;
-            entry.name = constructFrameFilename(mBaseName, lastPts, 6, "dng");
+            entry.name = constructFrameFilename("frame-", lastPts, 6, "dng");
             entry.userData = x;
 
             mFiles.emplace_back(entry);
+
             ++lastPts;
         }
     }
-
-    // No point wasting the initial frame, add it to the cache
-    mCache.put(mFiles[0], dngData);
 }
 
-const std::vector<Entry>& VirtualFileSystemImpl_MCRAW::listFiles(const std::string& filter) const {
-    //TODO: Apply filter
+std::vector<Entry> VirtualFileSystemImpl_MCRAW::listFiles(const std::string& filter) const {
+    // TODO: Use filter
     return mFiles;
 }
 
-std::optional<Entry> VirtualFileSystemImpl_MCRAW::findEntry(const std::string& filter) const {
-    try {
-        // Normalize the filter path by converting all backslashes to forward slashes
-        std::string normalizedFilter = filter;
-        boost::replace_all(normalizedFilter, "\\", "/");
-
-        // Convert the filter string to a regex pattern
-        // Escape dots in the literal parts of the pattern
-        std::string regexPattern = boost::replace_all_copy(normalizedFilter, ".", "\\.");
-
-        // Handle wildcards
-        regexPattern = boost::replace_all_copy(regexPattern, "*", ".*");
-        regexPattern = boost::replace_all_copy(regexPattern, "?", ".");
-
-        boost::regex pattern(regexPattern, boost::regex::icase);
-
-        // Iterate through all entries
-        for (const auto& entry : mFiles) {
-            // Check if the name matches the filter
-            if (boost::regex_match(entry.name, pattern)) {
-                return entry;
-            }
-
-            // Construct the full path from pathParts and name
-            std::string fullPath;
-            for (const auto& part : entry.pathParts) {
-                fullPath += part + "/";
-            }
-
-            fullPath += entry.name;
-
-            // Also check the full path against the pattern
-            if (boost::regex_match(fullPath, pattern)) {
-                return entry;
-            }
-
-            // Handle case where filter might be a partial path
-            // For example, if filter is "dir/file.txt" or "dir\\file.txt"
-            boost::filesystem::path filterPath(normalizedFilter);
-            std::string filterFilename = filterPath.filename().string();
-
-            // If the filename part matches and we should check path components
-            if (entry.name == filterFilename || boost::regex_match(entry.name, boost::regex(filterFilename))) {
-                // The filter might contain path information
-                if (filterPath.has_parent_path()) {
-                    std::string parentPath = filterPath.parent_path().string();
-                    boost::replace_all(parentPath, "\\", "/");
-
-                    // Reconstruct entry's parent path
-                    std::string entryParentPath;
-                    for (const auto& part : entry.pathParts) {
-                        entryParentPath += part + "/";
-                    }
-
-                    // Remove trailing slash if present
-                    if (!entryParentPath.empty() && entryParentPath.back() == '/') {
-                        entryParentPath.pop_back();
-                    }
-
-                    // Check if the parent paths match
-                    if (entryParentPath.find(parentPath) != std::string::npos ||
-                        boost::ends_with(entryParentPath, parentPath)) {
-                        return entry;
-                    }
-                }
-            }
-        }
-
-        // No match found
-        return std::nullopt;
+std::optional<Entry> VirtualFileSystemImpl_MCRAW::findEntry(const std::string& fullPath) const {
+    for(const auto& e : mFiles) {
+        if(boost::filesystem::path(fullPath) == e.getFullPath())
+            return e;
     }
-    catch (const boost::regex_error& e) {
-        spdlog::error("findEntry(error={})", e.what());
 
-        // Handle invalid regex pattern
-        return std::nullopt;
-    }
-    catch (const std::exception& e) {
-        spdlog::error("findEntry(error={})", e.what());
-
-        // Handle other exceptions
-        return std::nullopt;
-    }
+    return {};
 }
 
-int VirtualFileSystemImpl_MCRAW::readFile(const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst) const {
-#ifdef _WIN32
-    if(entry.name == "desktop.ini") {
-        if(len < DESKTOP_INI.size())
-            return 0;
+size_t VirtualFileSystemImpl_MCRAW::generateFrame(
+    const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const
+{
+    using FrameData = std::tuple<size_t, CameraConfiguration, CameraFrameMetadata, std::shared_ptr<std::vector<uint8_t>>>;
 
-        std::memcpy(dst, DESKTOP_INI.data(), DESKTOP_INI.size());
+    // Use IO thread pool to decode frame
+    auto frameDataFuture = mIoThreadPool->submit_task([this, entry, options]() -> FrameData {
+        thread_local std::map<std::string, std::unique_ptr<Decoder>> decoders;
 
-        return DESKTOP_INI.size();
-    }
-#endif
+        auto timestamp = std::get<Timestamp>(entry.userData);
 
-    // Try to get from cache first
-    auto dngData = mCache.get(entry);
-    if(!dngData) {
+        spdlog::debug("Reading frame {} with options {}", timestamp, optionsToString(options));
+
+        if(decoders.find(mSrcPath) == decoders.end()) {
+            decoders[mSrcPath] = std::make_unique<Decoder>(mSrcPath);
+        }
+
+        auto& decoder = decoders[mSrcPath];
+        auto data = std::make_shared<std::vector<uint8_t>>();
+
+        nlohmann::json metadata;        
+        auto allFrames = decoder->getFrames();
+
+        // Find the frame (index)
+        auto it = std::find(allFrames.begin(), allFrames.end(), timestamp);
+        if(it == allFrames.end()) {
+            spdlog::error("Frame {} not found", timestamp);
+            throw std::runtime_error("Failed to find frame");
+        }
+
+        decoder->loadFrame(timestamp, *data, metadata);
+
+        size_t frameIndex = std::distance(allFrames.begin(), it);
+
+        return std::make_tuple(
+            frameIndex, CameraConfiguration::parse(decoder->getContainerMetadata()), CameraFrameMetadata::parse(metadata), std::move(data));
+    });
+
+    // Use processing thread pool to generate DNG
+    auto sharableFuture = frameDataFuture.share();
+
+    const float fps = mFps;
+    auto generateTask = [sharableFuture, fps, options, pos, len, dst, result]() {
+        size_t readBytes = 0;
+        int errorCode = -1;
+
         try {
-            auto timestamp = std::get<Timestamp>(entry.userData);
-            thread_local Decoder decoder(mSrcPath); // Use a decoder for each thread
+            auto decodedFrame = sharableFuture.get();
+            auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
 
-            spdlog::debug("Reading frame {} with options {}", timestamp, static_cast<unsigned int>(options));
+            auto dngData = utils::generateDng(
+                *frameData,
+                frameMetadata,
+                containerMetadata,
+                fps,
+                frameIndex,
+                options,
+                getScaleFromOptions(options));
 
-            std::vector<uint8_t> data;
-            nlohmann::json metadata;
+            if(dngData && pos < dngData->size()) {
+                // Calculate length to copy
+                const size_t actualLen = (std::min)(len, dngData->size() - pos);
 
-            decoder.loadFrame(timestamp, data, metadata);
+                std::memcpy(dst, dngData->data() + pos, actualLen);
 
-            dngData = generateDng(data, metadata, mDecoder->getContainerMetadata(), getScaleFromOptions(options));
-
-            mCache.put(entry, dngData);
+                readBytes = actualLen;
+                errorCode = 0;
+            }
         }
         catch(std::runtime_error& e) {
             spdlog::error("Failed to read frame (error: {})", e.what());
-            return 0;
         }
+
+        result(readBytes, errorCode);
+    };
+
+    (void)mProcessingThreadPool->submit_task(generateTask);
+
+    return 0;
+}
+
+size_t VirtualFileSystemImpl_MCRAW::generateAudio(
+    const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const
+{
+    size_t readBytes = 0;
+
+    if(pos < mAudioFile.size()) {
+        // Calculate length to copy
+        const size_t actualLen = (std::min)(len, mAudioFile.size() - pos);
+
+        std::memcpy(dst, mAudioFile.data() + pos, actualLen);
+
+        readBytes = actualLen;
     }
 
-    if(!dngData)
-        return 0;
+    return readBytes;
+}
 
-    if (pos >= dngData->size())
-        return 0;
+size_t VirtualFileSystemImpl_MCRAW::readFile(
+    const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const {
 
-    // Calculate actual length to copy (to avoid going out of bounds)
-    const size_t actualLen = std::min(len, dngData->size() - pos);
+    #ifdef _WIN32
+        if(entry.name == "desktop.ini") {
+            const size_t actualLen = (std::min)(len, DESKTOP_INI.size() - pos);
+            std::memcpy(dst, DESKTOP_INI.data() + pos, actualLen);
 
-    std::memcpy(dst, dngData->data() + pos, actualLen);
+            return actualLen;
+        }
+    #endif
 
-    return actualLen;
+    // Requestion audio?
+    if(boost::ends_with(entry.name, "wav")) {
+        return generateAudio(entry, options, pos, len, dst, result);
+    }
+    else if(boost::ends_with(entry.name, "dng")) {
+        return generateFrame(entry, options, pos, len, dst, result);
+    }
+
+    result(0, -1);
+
+    return 0;
 }
 
 void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options) {

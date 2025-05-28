@@ -1,0 +1,41 @@
+#pragma once
+
+#include <nlohmann/json.hpp>
+#include <vector>
+#include <string>
+#include <array>
+
+namespace motioncam {
+
+struct CameraFrameMetadata {
+    std::array<float, 3> asShotNeutral;
+    int compressionType;
+    std::array<float, 4> dynamicBlackLevel;
+    double dynamicWhiteLevel;
+    int exposureCompensation;
+    double exposureTime;
+    std::string filename;
+    int height;
+    bool isBinned;
+    bool isCompressed;
+    int iso;
+    std::vector<std::vector<float>> lensShadingMap;
+    int lensShadingMapHeight;
+    int lensShadingMapWidth;
+    bool needRemosaic;
+    std::string offset;
+    int orientation;
+    int originalHeight;
+    int originalWidth;
+    std::string pixelFormat;
+    std::string recvdTimestampMs;
+    int rowStride;
+    std::string timestamp;
+    std::string type;
+    int width;
+
+    static CameraFrameMetadata parse(const std::string& jsonString);
+    static CameraFrameMetadata parse(const nlohmann::json& j);
+};
+
+}

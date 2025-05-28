@@ -3,11 +3,9 @@
 #include "win/virtualizationInstance.h"
 
 #include "VirtualFileSystemImpl_MCRAW.h"
-#include "LRUCache.h"
 
 #include <iostream>
 #include <ntstatus.h>
-#include <BS_thread_pool.hpp>
 #include <mutex>
 
 #include <boost/filesystem.hpp>
@@ -49,8 +47,6 @@ class Session : public VirtualizationInstance {
 public:
     Session(
         FileRenderOptions options,
-        BS::thread_pool& threadPool,
-        LRUCache& cache,
         const std::string& srcFile,
         const std::string& dstPath);
 
@@ -83,7 +79,6 @@ protected:
 
 private:
     FileRenderOptions mOptions;
-    BS::thread_pool& mThreadPool;
     std::mutex mOpLock;
     std::unique_ptr<VirtualFileSystemImpl_MCRAW> mFs;
     std::map<GUID, std::unique_ptr<DirInfo>, GUIDComparer> mActiveEnumSessions;
@@ -91,34 +86,41 @@ private:
 
 Session::Session(
     FileRenderOptions options,
-    BS::thread_pool& threadPool,
-    LRUCache& cache,
     const std::string& srcFile,
     const std::string& dstPath) :
     mOptions(options),
-    mThreadPool(threadPool),
-    mFs(std::make_unique<VirtualFileSystemImpl_MCRAW>(options, cache, srcFile))
+    mFs(std::make_unique<VirtualFileSystemImpl_MCRAW>(options, srcFile))
 {
-    // SetOptionalMethods(OptionalMethods::Notify);
+    SetOptionalMethods(OptionalMethods::Notify);
 
-    // // Specify the notifications that we want ProjFS to send to us.  Everywhere under the virtualization
-    // // root we want ProjFS to tell us when files have been opened, when they're about to be renamed,
-    // // and when they're about to be deleted.
-    // PRJ_NOTIFICATION_MAPPING notificationMappings[1] = {};
+    // Specify the notifications that we want ProjFS to send to us.  Everywhere under the virtualization
+    // root we want ProjFS to tell us when files have been opened, when they're about to be renamed,
+    // and when they're about to be deleted.
+    PRJ_NOTIFICATION_MAPPING notificationMappings[] = {
+        {
+            PRJ_NOTIFY_FILE_OPENED                      |
+            PRJ_NOTIFY_NEW_FILE_CREATED                 |
+            PRJ_NOTIFY_FILE_OVERWRITTEN                 |
+            PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_MODIFIED |
+            PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_DELETED  |
+            PRJ_NOTIFY_FILE_RENAMED                     |
+            PRJ_NOTIFY_HARDLINK_CREATED                 |
+            PRJ_NOTIFY_PRE_DELETE                       |
+            PRJ_NOTIFY_PRE_RENAME                       |
+            PRJ_NOTIFY_FILE_PRE_CONVERT_TO_FULL         |
+            PRJ_NOTIFY_PRE_SET_HARDLINK,
+            L""
+        }
+    };
 
-    // notificationMappings[0].NotificationRoot = L"";
-    // notificationMappings[0].NotificationBitMask = PRJ_NOTIFY_FILE_OPENED |
-    //                                               PRJ_NOTIFY_PRE_RENAME |
-    //                                               PRJ_NOTIFY_PRE_DELETE;
+    // Store the notification mapping we set up into a start options structure.  We leave all the
+    // other options at their defaults.
+    PRJ_STARTVIRTUALIZING_OPTIONS prjOptions = {};
 
-    // // Store the notification mapping we set up into a start options structure.  We leave all the
-    // // other options at their defaults.
-    // PRJ_STARTVIRTUALIZING_OPTIONS options = {};
+    prjOptions.NotificationMappings = notificationMappings;
+    prjOptions.NotificationMappingsCount = 1;
 
-    // options.NotificationMappings = notificationMappings;
-    // options.NotificationMappingsCount = 1;
-
-    auto hr = this->Start(fromUTF8(dstPath).c_str());
+    auto hr = this->Start(fromUTF8(dstPath).c_str(), &prjOptions);
     if(hr != S_OK) {
         throw std::runtime_error("Failed to create mount point (error: + " + std::to_string(hr) + ")");
     }
@@ -137,8 +139,6 @@ void Session::updateOptions(FileRenderOptions options) {
     // Tell file system about new options
     mFs->updateOptions(options);
 
-    spdlog::debug("Updating render options to {}", static_cast<unsigned int>(mOptions));
-
     // We need to clear out the cache
     auto files = mFs->listFiles();
     HRESULT hr = S_OK;
@@ -152,15 +152,14 @@ void Session::updateOptions(FileRenderOptions options) {
         PRJ_UPDATE_ALLOW_READ_ONLY;
 
     for(auto& e : files) {
-        auto fullPath = e.getFullPath();
+        auto fullPath = e.getFullPath().string();
 
         hr = PrjDeleteFile(_instanceHandle, fromUTF8(fullPath).c_str(), updateFlags, &failureReason);
 
-        if(FAILED(hr))
+        // Ignore file not found errors
+        if(FAILED(hr) && hr != HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))
             spdlog::error("Failed to refresh cache entry {} (error: 0x{:08x}, reason: {})",
                 fullPath, static_cast<unsigned int>(hr), static_cast<unsigned int>(failureReason));
-        else
-            spdlog::debug("Refreshed {}", fullPath);
     }
 }
 
@@ -281,7 +280,9 @@ HRESULT Session::GetPlaceholderInfo(_In_ const PRJ_CALLBACK_DATA* CallbackData) 
     PRJ_PLACEHOLDER_INFO placeholderInfo = {};
 
     placeholderInfo.FileBasicInfo.IsDirectory = entry.type == EntryType::DIRECTORY_ENTRY;
-    placeholderInfo.FileBasicInfo.FileSize = entry.size;
+    placeholderInfo.FileBasicInfo.FileSize = entry.size;    
+    placeholderInfo.FileBasicInfo.FileAttributes =
+        FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_VIRTUAL;
 
     // Store content id
     placeholderInfo.VersionInfo.ContentID[0] = (UINT8)( mOptions & 0xFF);
@@ -299,23 +300,23 @@ HRESULT Session::GetPlaceholderInfo(_In_ const PRJ_CALLBACK_DATA* CallbackData) 
     return hr;
 }
 
-HRESULT Session::GetFileData(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ UINT64 ByteOffset, _In_ UINT32 Length) {
+HRESULT Session::GetFileData(_In_ const PRJ_CALLBACK_DATA* callbackData, _In_ UINT64 byteOffset, _In_ UINT32 length) {
     spdlog::debug("GetFileData(): Path [{}] (byteOffset: {} and length: {}) triggered by [{}]",
-                  toUTF8(CallbackData->FilePathName),
-                  ByteOffset,
-                  Length,
-                  toUTF8(CallbackData->TriggeringProcessImageFileName));
+                  toUTF8(callbackData->FilePathName),
+                  byteOffset,
+                  length,
+                  toUTF8(callbackData->TriggeringProcessImageFileName));
 
     HRESULT hr = S_OK;
 
     auto options =
-        (uint32_t) CallbackData->VersionInfo->ContentID[0]          |
-        ((uint32_t)CallbackData->VersionInfo->ContentID[1] << 8)    |
-        ((uint32_t)CallbackData->VersionInfo->ContentID[2] << 16)   |
-        ((uint32_t)CallbackData->VersionInfo->ContentID[3] << 24);
+        (uint32_t) callbackData->VersionInfo->ContentID[0]          |
+        ((uint32_t)callbackData->VersionInfo->ContentID[1] << 8)    |
+        ((uint32_t)callbackData->VersionInfo->ContentID[2] << 16)   |
+        ((uint32_t)callbackData->VersionInfo->ContentID[3] << 24);
 
     // Match file entry first
-    auto fsEntry = mFs->findEntry(toUTF8(CallbackData->FilePathName));
+    auto fsEntry = mFs->findEntry(toUTF8(callbackData->FilePathName));
     if(!fsEntry) {
         hr = E_FAIL;
         return hr;
@@ -332,34 +333,30 @@ HRESULT Session::GetFileData(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ UI
         return hr;
     }
 
-    auto commandId = CallbackData->CommandId;
-    auto dataStramId = CallbackData->DataStreamId;
-    auto fileName = toUTF8(CallbackData->FilePathName);
+    auto commandId = callbackData->CommandId;
+    auto dataStramId = callbackData->DataStreamId;
+    auto fileName = toUTF8(callbackData->FilePathName);
 
-    auto future = mThreadPool.submit_task([this, commandId, dataStramId, fileName, options, fsEntry, ByteOffset, Length] {
-        // Allocate a buffer that adheres to the machine's memory alignment.  We have to do this in case
-        // the caller who caused this callback to be invoked is performing non-cached I/O.  For more
-        // details, see the topic "Providing File Data" in the ProjFS documentation.
-        void* writeBuffer = PrjAllocateAlignedBuffer(_instanceHandle, Length);
-        if (writeBuffer == nullptr)
-        {
-            spdlog::error("GetFileData(): Could not allocate write buffer");
+    // Allocate a buffer that adheres to the machine's memory alignment.  We have to do this in case
+    // the caller who caused this callback to be invoked is performing non-cached I/O.  For more
+    // details, see the topic "Providing File Data" in the ProjFS documentation.
+    void* writeBuffer = PrjAllocateAlignedBuffer(_instanceHandle, length);
+    if (writeBuffer == nullptr)
+    {
+        spdlog::error("GetFileData(): Could not allocate write buffer");
 
-            return E_OUTOFMEMORY;
-        }
+        return E_OUTOFMEMORY;
+    }
 
+    auto completeTransaction = [this, writeBuffer, byteOffset, length, fileName, commandId, dataStramId](size_t readBytes, int error, bool isAsync) {
         HRESULT hr = S_OK;
 
-        // Read the data
-        auto readBytes = mFs->readFile(*fsEntry, static_cast<FileRenderOptions>(options), ByteOffset, Length, writeBuffer);
-        if(readBytes == Length) {
-            // Call ProjFS to write the data we read into the on-disk placeholder.
-            hr = this->WriteFileData(
-                &dataStramId, reinterpret_cast<PVOID>(writeBuffer), ByteOffset, Length);
+        if(readBytes == length) {
+            hr = WriteFileData(&dataStramId, reinterpret_cast<PVOID>(writeBuffer), byteOffset, length);
         }
         else {
             hr = E_FAIL;
-            spdlog::error("GetFileData(): Failed to read file requested bytes {} but received {}", Length, readBytes);
+            spdlog::error("GetFileData(): Failed to read file requested bytes {} but received {}", length, readBytes);
         }
 
         if (FAILED(hr))
@@ -375,12 +372,27 @@ HRESULT Session::GetFileData(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ UI
         if(FAILED(hr))
             spdlog::error("GetFileData(): Return 0x{:08x}", static_cast<unsigned int>(hr));
 
-        PrjCompleteCommand(_instanceHandle, commandId, hr, nullptr);
+        if(isAsync)
+            PrjCompleteCommand(_instanceHandle, commandId, hr, nullptr);
+    };
 
+    auto asyncCompleteTransaction = std::bind(completeTransaction, std::placeholders::_1, std::placeholders::_2, true);
+
+    // Read the data asynchronously
+    auto result = mFs->readFile(
+        *fsEntry,
+        static_cast<FileRenderOptions>(options),
+        byteOffset,
+        length,
+        writeBuffer,
+        asyncCompleteTransaction);
+
+    if(result > 0) {
+        completeTransaction(result, 0, false);
         return hr;
-    });
-
-    return HRESULT_FROM_WIN32(ERROR_IO_PENDING);
+    }
+    else // async read
+        return HRESULT_FROM_WIN32(ERROR_IO_PENDING);
 }
 
 HRESULT Session::Notify(
@@ -390,18 +402,18 @@ HRESULT Session::Notify(
     _In_opt_ PCWSTR DestinationFileName,
     _Inout_ PRJ_NOTIFICATION_PARAMETERS* NotificationParameters) {
 
-    HRESULT hr = S_OK;
-
     spdlog::debug("{}: Path [{}] triggered by [{}] Notification: 0x{:08x}",
                  __FUNCTION__,
                  toUTF8(CallbackData->FilePathName),
                  toUTF8(CallbackData->TriggeringProcessImageFileName),
                 static_cast<unsigned int>(NotificationType));
 
-    // TODO
     switch (NotificationType)
     {
+    case PRJ_NOTIFICATION_FILE_PRE_CONVERT_TO_FULL:
     case PRJ_NOTIFICATION_FILE_OPENED:
+        return S_OK;
+
     case PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_MODIFIED:
     case PRJ_NOTIFICATION_FILE_OVERWRITTEN:
     case PRJ_NOTIFICATION_NEW_FILE_CREATED:
@@ -409,12 +421,12 @@ HRESULT Session::Notify(
     case PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_DELETED:
     case PRJ_NOTIFICATION_PRE_RENAME:
     case PRJ_NOTIFICATION_PRE_DELETE:
-    case PRJ_NOTIFICATION_FILE_PRE_CONVERT_TO_FULL:
-    default:
-        spdlog::debug("{}: Unexpected notification", __FUNCTION__);
-    }
+        // Deny all write operations
+        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
 
-    return hr;
+    default:
+        return S_OK;
+    }
 }
 
 void setupLogging() {
@@ -439,7 +451,7 @@ void setupLogging() {
 
         // Set log level
 #ifdef NDEBUG
-        spdlog::set_level(spdlog::level::debug);
+        spdlog::set_level(spdlog::level::info);
 #else
         spdlog::set_level(spdlog::level::debug);
 #endif
@@ -456,8 +468,6 @@ void setupLogging() {
 } // namespace
 
 FuseFileSystemImpl_Win::FuseFileSystemImpl_Win() :
-    mThreadPool(std::make_unique<BS::thread_pool>()),
-    mCache(std::make_unique<LRUCache>(CACHE_SIZE)),
     mNextMountId(0) {
     setupLogging();
 }
@@ -472,8 +482,7 @@ MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, const std::stri
         auto mountId = mNextMountId++;
 
         try {
-            mMountedFiles[mountId] = std::make_unique<Session>(
-                options, *mThreadPool, *mCache, srcFile, dstPath);
+            mMountedFiles[mountId] = std::make_unique<Session>(options, srcFile, dstPath);
         }
         catch(std::runtime_error& e) {
             spdlog::error("Failed to mount {} to {} (error: {})", srcFile, dstPath, e.what());

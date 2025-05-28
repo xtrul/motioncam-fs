@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QMessageBox>
+#include <QFileDialog>
 
 #ifdef _WIN32
 #include "win/FuseFileSystemImpl_Win.h"
@@ -15,10 +16,18 @@
 
 namespace {
     motioncam::FileRenderOptions getRenderOptions(Ui::MainWindow& ui) {
-        if(ui.draftModeCheckBox->checkState() == Qt::CheckState::Checked)
-            return motioncam::RENDER_OPT_DRAFT;
+        motioncam::FileRenderOptions options = motioncam::RENDER_OPT_NONE;
 
-        return motioncam::RENDER_OPT_NONE;
+        if(ui.draftModeCheckBox->checkState() == Qt::CheckState::Checked)
+            options |= motioncam::RENDER_OPT_DRAFT;
+
+        if(ui.vignetteCorrectionCheckBox->checkState() == Qt::CheckState::Checked)
+            options |= motioncam::RENDER_OPT_APPLY_VIGNETTE_CORRECTION;
+
+        if(ui.scaleRawCheckBox->checkState() == Qt::CheckState::Checked)
+            options |= motioncam::RENDER_OPT_NORMALIZE_SHADING_MAP;
+
+        return options;
     }
 }
 
@@ -31,6 +40,13 @@ MainWindow::MainWindow(QWidget *parent)
     // Enable drag and drop on the scroll area
     ui->dragAndDropScrollArea->setAcceptDrops(true);
     ui->dragAndDropScrollArea->installEventFilter(this);
+
+    // Connect to widgets
+    connect(ui->draftModeCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
+    connect(ui->vignetteCorrectionCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
+    connect(ui->scaleRawCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
+
+    connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
 
 #ifdef _WIN32
     mFuseFilesystem = std::make_unique<motioncam::FuseFileSystemImpl_Win>();
@@ -85,7 +101,7 @@ void MainWindow::mountFile(const QString& filePath) {
     // Extract just the filename from the path
     QFileInfo fileInfo(filePath);
     QString fileName = fileInfo.fileName();
-    QString dstPath = fileInfo.path() + "/" + fileInfo.baseName();
+    QString dstPath = (mCacheRootFolder.isEmpty() ? fileInfo.path() : mCacheRootFolder) + "/" + fileInfo.baseName();
     motioncam::MountId mountId;
 
     try {
@@ -93,12 +109,11 @@ void MainWindow::mountFile(const QString& filePath) {
             getRenderOptions(*ui), filePath.toStdString(), dstPath.toStdString());
     }
     catch(std::runtime_error& e) {
-        // log error
+        QMessageBox::critical(this, "Error", QString("There was an error mounting the file. (error: %1)").arg(e.what()));
         return;
     }
 
     if(mountId == motioncam::InvalidMountId) {
-        // todo: log error
         return;
     }
 
@@ -180,7 +195,7 @@ void MainWindow::removeFile(QWidget* fileWidget) {
         mFuseFilesystem->unmount(mountId);
 }
 
-void MainWindow::onDraftModeCheckBoxChanged(const Qt::CheckState &checkState) {
+void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
     auto it = mMountedFiles.begin();
     auto renderOptions = getRenderOptions(*ui);
 
@@ -188,4 +203,18 @@ void MainWindow::onDraftModeCheckBoxChanged(const Qt::CheckState &checkState) {
         mFuseFilesystem->updateOptions(*it, renderOptions);
         ++it;
     }
+}
+
+void MainWindow::onSetCacheFolder(bool checked) {
+    Q_UNUSED(checked);  // Parameter not needed for folder selection
+
+    QString folderPath = QFileDialog::getExistingDirectory(
+        this,
+        tr("Select Cache Root Folder"),
+        QString(),  // Start from default location
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+    );
+
+    mCacheRootFolder = folderPath;
+    ui->cacheFolderLabel->setText(mCacheRootFolder);
 }

@@ -19,6 +19,10 @@ set(PROJECT_SOURCES
         src/main.cpp
         src/mainwindow.cpp
         src/VirtualFileSystemImpl_MCRAW.cpp
+        src/CameraMetadata.cpp
+        src/CameraFrameMetadata.cpp
+        src/AudioWriter.cpp
+        src/Utils.cpp
 
         include/mainwindow.h
         include/Types.h
@@ -26,6 +30,12 @@ set(PROJECT_SOURCES
         include/IFuseFileSystem.h
         include/VirtualFileSystemImpl_MCRAW.h
         include/LRUCache.h
+        include/AudioWriter.h
+        include/Measure.h
+        include/SingleApplication.h
+        include/CameraMetadata.h
+        include/CameraFrameMetadata.h
+        include/Utils.h
 
         ui/mainwindow.ui
 )
@@ -50,8 +60,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(motioncam-fs
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        include/Measure.h
-        include/SingleApplication.h
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET motioncam-fs APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -81,6 +89,7 @@ add_library(motioncam-decoder STATIC
 
 target_include_directories(motioncam-decoder
     PUBLIC
+    ${DEPENDENCIES_PATH}/bw64/include
     ${DEPENDENCIES_PATH}/motioncam-decoder/thirdparty
     ${DEPENDENCIES_PATH}/motioncam-decoder/lib/include
 )

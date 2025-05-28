@@ -27,7 +27,9 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
-    void onDraftModeCheckBoxChanged(const Qt::CheckState &state);
+    void onRenderSettingsChanged(const Qt::CheckState &state);
+    void onSetCacheFolder(bool checked);
+
     void playFile(const QString& path);
     void removeFile(QWidget* fileWidget);
 
@@ -35,6 +37,7 @@ private:
     Ui::MainWindow *ui;
     std::unique_ptr<motioncam::IFuseFileSystem> mFuseFilesystem;
     QList<motioncam::MountId> mMountedFiles;
+    QString mCacheRootFolder;
 };
 
 #endif // MAINWINDOW_H

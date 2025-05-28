@@ -45,7 +45,7 @@ struct Entry {
                name == other.name;
     }
 
-    std::string getFullPath() {
+    boost::filesystem::path getFullPath() const {
         namespace fs = boost::filesystem;
 
         fs::path result;
@@ -58,7 +58,7 @@ struct Entry {
         // Add the filename
         result /= name;
 
-        return result.string();
+        return result;
     }
 };
 
@@ -66,7 +66,59 @@ struct Entry {
 enum FileRenderOptions : unsigned int {
     RENDER_OPT_NONE                         = 0,
     RENDER_OPT_DRAFT                        = 1 << 0,
-    RENDER_OPT_APPLY_VIGNETTE_CORRECTION    = 1 << 1
+    RENDER_OPT_APPLY_VIGNETTE_CORRECTION    = 1 << 1,
+    RENDER_OPT_NORMALIZE_SHADING_MAP        = 1 << 2
 };
+
+// Overload bitwise OR operator
+inline FileRenderOptions operator|(FileRenderOptions a, FileRenderOptions b) {
+    return static_cast<FileRenderOptions>(static_cast<unsigned int>(a) | static_cast<unsigned int>(b));
+}
+
+// Overload compound assignment OR operator
+inline FileRenderOptions& operator|=(FileRenderOptions& a, FileRenderOptions b) {
+    return a = a | b;
+}
+
+// Overload bitwise AND operator (for checking flags)
+inline FileRenderOptions operator&(FileRenderOptions a, FileRenderOptions b) {
+    return static_cast<FileRenderOptions>(static_cast<unsigned int>(a) & static_cast<unsigned int>(b));
+}
+
+// Overload compound assignment AND operator
+inline FileRenderOptions& operator&=(FileRenderOptions& a, FileRenderOptions b) {
+    return a = a & b;
+}
+
+// Overload bitwise NOT operator (for clearing flags)
+inline FileRenderOptions operator~(FileRenderOptions a) {
+    return static_cast<FileRenderOptions>(~static_cast<unsigned int>(a));
+}
+
+static std::string optionsToString(FileRenderOptions options) {
+    if (options == RENDER_OPT_NONE) {
+        return "NONE";
+    }
+
+    std::vector<std::string> flags;
+
+    if (options & RENDER_OPT_DRAFT) {
+        flags.push_back("DRAFT");
+    }
+    if (options & RENDER_OPT_APPLY_VIGNETTE_CORRECTION) {
+        flags.push_back("VIGNETTE_CORRECTION");
+    }
+    if (options & RENDER_OPT_NORMALIZE_SHADING_MAP) {
+        flags.push_back("NORMALIZE_SHADING_MAP");
+    }
+
+    std::string result;
+    for (size_t i = 0; i < flags.size(); ++i) {
+        if (i > 0) result += " | ";
+        result += flags[i];
+    }
+
+    return result;
+}
 
 } // namespace
