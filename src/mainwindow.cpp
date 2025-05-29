@@ -189,7 +189,7 @@ void MainWindow::mountFile(const QString& filePath) {
     // Create a widget to hold a filename label and remove button
     QWidget* fileWidget = new QWidget(scrollContent);
 
-    fileWidget->setFixedHeight(40);
+    fileWidget->setFixedHeight(50);
     fileWidget->setProperty("filePath", filePath);
     fileWidget->setProperty("mountId", mountId);
 
@@ -198,6 +198,7 @@ void MainWindow::mountFile(const QString& filePath) {
 
     // Create and add the filename label
     QLabel* fileLabel = new QLabel(fileName, fileWidget);
+
     fileLabel->setToolTip(filePath); // Show full path on hover
     fileLayout->addWidget(fileLabel);
 
@@ -206,12 +207,20 @@ void MainWindow::mountFile(const QString& filePath) {
 
     // Create and add the remove button
     QPushButton* playButton = new QPushButton("Play", fileWidget);
-    playButton->setMaximumWidth(80);
+
+    playButton->setMaximumWidth(100);
+    playButton->setMaximumHeight(30);
+    playButton->setIcon(QIcon(":/assets/play_btn.png"));
+
     fileLayout->addWidget(playButton);
 
     // Create and add the remove button
     QPushButton* removeButton = new QPushButton("Remove", fileWidget);
-    removeButton->setMaximumWidth(80);
+
+    removeButton->setMaximumWidth(100);
+    removeButton->setMaximumHeight(30);
+    removeButton->setIcon(QIcon(":/assets/remove_btn.png"));
+
     fileLayout->addWidget(removeButton);
 
     // Add the file widget to the scroll area
