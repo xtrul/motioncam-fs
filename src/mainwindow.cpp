@@ -42,6 +42,10 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+#ifdef _WIN32
+    mFuseFilesystem = std::make_unique<motioncam::FuseFileSystemImpl_Win>();
+#endif
+
     // Enable drag and drop on the scroll area
     ui->dragAndDropScrollArea->setAcceptDrops(true);
     ui->dragAndDropScrollArea->installEventFilter(this);
@@ -55,10 +59,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
     connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
-
-#ifdef _WIN32
-    mFuseFilesystem = std::make_unique<motioncam::FuseFileSystemImpl_Win>();
-#endif    
 }
 
 MainWindow::~MainWindow() {
@@ -75,6 +75,16 @@ void MainWindow::saveSettings() {
     settings.setValue("scaleRaw", ui->scaleRawCheckBox->checkState() == Qt::CheckState::Checked);
     settings.setValue("cachePath", mCacheRootFolder);
     settings.setValue("draftQuality", mDraftQuality);
+
+    // Save mounted files
+    settings.beginWriteArray("mountedFiles");
+
+    for (int i = 0; i < mMountedFiles.size(); ++i) {
+        settings.setArrayIndex(i);
+        settings.setValue("srcFile", mMountedFiles[i].srcFile);
+    }
+
+    settings.endArray();
 }
 
 void MainWindow::restoreSettings() {
@@ -98,6 +108,16 @@ void MainWindow::restoreSettings() {
         ui->draftQuality->setCurrentIndex(1);
     else if(mDraftQuality == 8)
         ui->draftQuality->setCurrentIndex(2);
+
+    // Restore mounted files
+    int size = settings.beginReadArray("mountedFiles");
+    for (int i = 0; i < size; ++i) {
+        settings.setArrayIndex(i);
+        QString srcFile = settings.value("srcFile").toString();
+
+        mountFile(srcFile);
+    }
+    settings.endArray();
 
     updateUi();
 }
@@ -209,7 +229,8 @@ void MainWindow::mountFile(const QString& filePath) {
         removeFile(fileWidget);
     });
 
-    mMountedFiles.append(mountId);
+    mMountedFiles.append(
+        motioncam::MountedFile(mountId, filePath));
 }
 
 void MainWindow::playFile(const QString& path) {
@@ -263,7 +284,7 @@ void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
     updateUi();
 
     while(it != mMountedFiles.end()) {
-        mFuseFilesystem->updateOptions(*it, renderOptions, mDraftQuality);
+        mFuseFilesystem->updateOptions(it->mountId, renderOptions, mDraftQuality);
         ++it;
     }
 }

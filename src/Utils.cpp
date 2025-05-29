@@ -242,7 +242,7 @@ void encodeTo14Bit(
     data.resize(newSize);
 }
 
-std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
+std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> preprocessData(
     std::vector<uint8_t>& data,
     uint32_t& inOutWidth,
     uint32_t& inOutHeight,
@@ -266,19 +266,9 @@ std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
     uint32_t newWidth = inOutWidth / scale;
     uint32_t newHeight = inOutHeight / scale;
 
-    // Ensure even dimensions for Bayer pattern
-    newWidth = (newWidth / 2) * 2;
+    // Align to 4 for bayer pattern and also because we read 4 bytes at a time when encoding to 10/14 bit
+    newWidth = (newWidth / 4) * 4;
     newHeight = (newHeight / 4) * 4;
-
-    // Calculate shading map offsets
-    const int fulllWidth = metadata.originalWidth / scale;
-    const int fullHeight = metadata.originalHeight / scale;
-
-    const int left = (fulllWidth - newWidth) / 2;
-    const int top = (fullHeight - newHeight) / 2;
-
-    const float shadingMapScaleX = 1.0f / static_cast<float>(fulllWidth);
-    const float shadingMapScaleY = 1.0f / static_cast<float>(fullHeight);
 
     const auto& srcBlackLevel = cameraConfiguration.blackLevel;
     const float srcWhiteLevel = cameraConfiguration.whiteLevel;
@@ -293,7 +283,17 @@ std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
     std::array<unsigned short, 4> dstBlackLevel = srcBlackLevel;
     float dstWhiteLevel = srcWhiteLevel;
 
+    // Calculate shading map offsets
     auto lensShadingMap = metadata.lensShadingMap;
+
+    const int fullWidth = metadata.originalWidth;
+    const int fullHeight = metadata.originalHeight;
+
+    const int left = (fullWidth - inOutWidth) / 2;
+    const int top = (fullHeight - inOutHeight) / 2;
+
+    const float shadingMapScaleX = 1.0f / static_cast<float>(fullWidth);
+    const float shadingMapScaleY = 1.0f / static_cast<float>(fullHeight);
 
     // When applying shading map, increase precision
     if(applyShadingMap) {
@@ -305,17 +305,6 @@ std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
         if(normaliseShadingMap)
             normalizeShadingMap(lensShadingMap);
     }
-
-    // Prevent pink highlights when normalizing shading map
-    float asShotMin = std::min(std::min(metadata.asShotNeutral[0], metadata.asShotNeutral[1]), metadata.asShotNeutral[2]);
-    asShotMin = 1.0f / asShotMin;
-
-    std::array<float, 4> asShot;
-
-    asShot[0] = metadata.asShotNeutral[0] * asShotMin;
-    asShot[1] = metadata.asShotNeutral[1] * asShotMin;
-    asShot[2] = metadata.asShotNeutral[1] * asShotMin;
-    asShot[3] = metadata.asShotNeutral[2] * asShotMin;
 
     //
     // Preprocess data
@@ -329,6 +318,10 @@ std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
 
     // Process the image by copying and packing 2x2 Bayer blocks
     std::array<float, 4> shadingMapVals { 1.0f, 1.0f, 1.0f, 1.0f };
+    std::vector<uint8_t> dst;
+
+    dst.resize(sizeof(uint16_t) * newWidth * newHeight);
+    uint16_t* dstData = reinterpret_cast<uint16_t*>(dst.data());
 
     for (auto y = 0; y < newHeight; y += 2) {
         for (auto x = 0; x < newWidth; x += 2) {
@@ -356,10 +349,10 @@ std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
             }
 
             // Linearize and (maybe) apply shading map
-            float p0 = std::max(0.0f, linear[0] * (s0 - srcBlackLevel[0]) * shadingMapVals[cfa[0]]) * (dstWhiteLevel - dstBlackLevel[0]);
-            float p1 = std::max(0.0f, linear[1] * (s1 - srcBlackLevel[1]) * shadingMapVals[cfa[1]]) * (dstWhiteLevel - dstBlackLevel[1]);
-            float p2 = std::max(0.0f, linear[2] * (s2 - srcBlackLevel[2]) * shadingMapVals[cfa[2]]) * (dstWhiteLevel - dstBlackLevel[2]);
-            float p3 = std::max(0.0f, linear[3] * (s3 - srcBlackLevel[3]) * shadingMapVals[cfa[3]]) * (dstWhiteLevel - dstBlackLevel[3]);
+            const float p0 = std::max(0.0f, linear[0] * (s0 - srcBlackLevel[0]) * shadingMapVals[cfa[0]]) * (dstWhiteLevel - dstBlackLevel[0]);
+            const float p1 = std::max(0.0f, linear[1] * (s1 - srcBlackLevel[1]) * shadingMapVals[cfa[1]]) * (dstWhiteLevel - dstBlackLevel[1]);
+            const float p2 = std::max(0.0f, linear[2] * (s2 - srcBlackLevel[2]) * shadingMapVals[cfa[2]]) * (dstWhiteLevel - dstBlackLevel[2]);
+            const float p3 = std::max(0.0f, linear[3] * (s3 - srcBlackLevel[3]) * shadingMapVals[cfa[3]]) * (dstWhiteLevel - dstBlackLevel[3]);
 
             s0 = std::clamp(std::round((p0 + dstBlackLevel[0])), 0.f, dstWhiteLevel);
             s1 = std::clamp(std::round((p1 + dstBlackLevel[1])), 0.f, dstWhiteLevel);
@@ -367,10 +360,10 @@ std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
             s3 = std::clamp(std::round((p3 + dstBlackLevel[3])), 0.f, dstWhiteLevel);
 
             // Copy the 2x2 Bayer block
-            srcData[dstOffset]                 = static_cast<unsigned short>(s0);
-            srcData[dstOffset + 1]             = static_cast<unsigned short>(s1);
-            srcData[dstOffset + newWidth]      = static_cast<unsigned short>(s2);
-            srcData[dstOffset + newWidth + 1]  = static_cast<unsigned short>(s3);
+            dstData[dstOffset]                 = static_cast<unsigned short>(s0);
+            dstData[dstOffset + 1]             = static_cast<unsigned short>(s1);
+            dstData[dstOffset + newWidth]      = static_cast<unsigned short>(s2);
+            dstData[dstOffset + newWidth + 1]  = static_cast<unsigned short>(s3);
 
             dstOffset += 2;
         }
@@ -378,13 +371,11 @@ std::tuple<std::array<unsigned short, 4>, unsigned short> preprocessData(
         dstOffset += newWidth;
     }
 
-    data.resize(sizeof(uint16_t) * newWidth * newHeight);
-
     // Update dimensions
     inOutWidth = newWidth;
     inOutHeight = newHeight;
 
-    return std::make_tuple(dstBlackLevel, static_cast<unsigned short>(dstWhiteLevel));
+    return std::make_tuple(dst, dstBlackLevel, static_cast<unsigned short>(dstWhiteLevel));
 }
 
 std::shared_ptr<std::vector<char>> generateDng(
@@ -418,7 +409,7 @@ std::shared_ptr<std::vector<char>> generateDng(
     bool applyShadingMap = options & RENDER_OPT_APPLY_VIGNETTE_CORRECTION;
     bool normalizeShadingMap = options & RENDER_OPT_NORMALIZE_SHADING_MAP;
 
-    auto [dstBlackLevel, dstWhiteLevel] = utils::preprocessData(
+    auto [processedData, dstBlackLevel, dstWhiteLevel] = utils::preprocessData(
         data,
         width, height,
         metadata,
@@ -434,15 +425,15 @@ std::shared_ptr<std::vector<char>> generateDng(
     auto encodeBits = bitsNeeded(dstWhiteLevel);
 
     if(encodeBits <= 10) {
-        utils::encodeTo10Bit(data, width, height);
+        utils::encodeTo10Bit(processedData, width, height);
         encodeBits = 10;
     }
     else if(encodeBits <= 12) {
-        utils::encodeTo12Bit(data, width, height);
+        utils::encodeTo12Bit(processedData, width, height);
         encodeBits = 12;
     }
     else if(encodeBits <= 14) {
-        utils::encodeTo14Bit(data, width, height);
+        utils::encodeTo14Bit(processedData, width, height);
         encodeBits = 14;
     }
     else {
@@ -455,7 +446,7 @@ std::shared_ptr<std::vector<char>> generateDng(
     dng.SetBigEndian(false);
     dng.SetDNGVersion(1, 4, 0, 0);
     dng.SetDNGBackwardVersion(1, 1, 0, 0);
-    dng.SetImageData(reinterpret_cast<const unsigned char*>(data.data()), data.size());
+    dng.SetImageData(reinterpret_cast<const unsigned char*>(processedData.data()), processedData.size());
     dng.SetImageWidth(width);
     dng.SetImageLength(height);
     dng.SetPlanarConfig(tinydngwriter::PLANARCONFIG_CONTIG);
