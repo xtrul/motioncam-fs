@@ -113,9 +113,10 @@ void MainWindow::restoreSettings() {
     int size = settings.beginReadArray("mountedFiles");
     for (int i = 0; i < size; ++i) {
         settings.setArrayIndex(i);
-        QString srcFile = settings.value("srcFile").toString();
 
-        mountFile(srcFile);
+        QString srcFile = settings.value("srcFile").toString();
+        if(QFile::exists(srcFile)) // Mount files that exist
+            mountFile(srcFile);
     }
     settings.endArray();
 
