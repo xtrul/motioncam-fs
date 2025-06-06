@@ -1,9 +1,9 @@
 #include "VirtualFileSystemImpl_MCRAW.h"
 #include "CameraFrameMetadata.h"
 #include "CameraMetadata.h"
-#include "Measure.h"
 #include "Utils.h"
 #include "AudioWriter.h"
+#include "LRUCache.h"
 
 #include <motioncam/Decoder.hpp>
 
@@ -177,7 +177,8 @@ IconSize=16
 }
 
 VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
-    FileRenderOptions options, int draftScale, const std::string& file) :
+    LRUCache& lruCache, FileRenderOptions options, int draftScale, const std::string& file) :
+        mCache(lruCache),
         mIoThreadPool(std::make_unique<BS::thread_pool>(IO_THREADS)),
         mProcessingThreadPool(std::make_unique<BS::thread_pool>()),
         mSrcPath(file),
@@ -296,7 +297,7 @@ std::vector<Entry> VirtualFileSystemImpl_MCRAW::listFiles(const std::string& fil
 
 std::optional<Entry> VirtualFileSystemImpl_MCRAW::findEntry(const std::string& fullPath) const {
     for(const auto& e : mFiles) {
-        if(boost::filesystem::path(fullPath) == e.getFullPath())
+        if(boost::filesystem::path(fullPath).relative_path() == e.getFullPath())
             return e;
     }
 
@@ -304,9 +305,27 @@ std::optional<Entry> VirtualFileSystemImpl_MCRAW::findEntry(const std::string& f
 }
 
 size_t VirtualFileSystemImpl_MCRAW::generateFrame(
-    const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const
+    const Entry& entry,
+    FileRenderOptions options,
+    const size_t pos,
+    const size_t len,
+    void* dst,
+    std::function<void(size_t, int)> result,
+    bool async)
 {
     using FrameData = std::tuple<size_t, CameraConfiguration, CameraFrameMetadata, std::shared_ptr<std::vector<uint8_t>>>;
+
+    // Try to get from cache first
+    auto cacheEntry = mCache.get(entry);
+    if(cacheEntry && pos < cacheEntry->size()) {
+        // Calculate length to copy
+        const size_t actualLen = (std::min)(len, cacheEntry->size() - pos);
+
+        // Copy the data from cache
+        std::memcpy(dst, cacheEntry->data() + pos, actualLen);
+
+        return actualLen;
+    }
 
     // Use IO thread pool to decode frame
     auto frameDataFuture = mIoThreadPool->submit_task([this, entry, options]() -> FrameData {
@@ -323,7 +342,7 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
         auto& decoder = decoders[mSrcPath];
         auto data = std::make_shared<std::vector<uint8_t>>();
 
-        nlohmann::json metadata;        
+        nlohmann::json metadata;
         auto allFrames = decoder->getFrames();
 
         // Find the frame (index)
@@ -341,12 +360,14 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
             frameIndex, CameraConfiguration::parse(decoder->getContainerMetadata()), CameraFrameMetadata::parse(metadata), std::move(data));
     });
 
+
     // Use processing thread pool to generate DNG
     auto sharableFuture = frameDataFuture.share();
+
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    auto generateTask = [sharableFuture, fps, draftScale, options, pos, len, dst, result]() {
+    auto generateTask = [&cache = mCache, entry, sharableFuture, fps, draftScale, options, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
@@ -371,6 +392,9 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
 
                 readBytes = actualLen;
                 errorCode = 0;
+
+                // Add to cache
+                cache.put(entry, dngData);
             }
         }
         catch(std::runtime_error& e) {
@@ -378,7 +402,12 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
         }
 
         result(readBytes, errorCode);
+
+        return readBytes;
     };
+
+    if(!async)
+        return generateTask();
 
     (void)mProcessingThreadPool->submit_task(generateTask);
 
@@ -386,7 +415,13 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
 }
 
 size_t VirtualFileSystemImpl_MCRAW::generateAudio(
-    const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const
+    const Entry& entry,
+    FileRenderOptions options,
+    const size_t pos,
+    const size_t len,
+    void* dst,
+    std::function<void(size_t, int)> result,
+    bool async)
 {
     size_t readBytes = 0;
 
@@ -399,11 +434,18 @@ size_t VirtualFileSystemImpl_MCRAW::generateAudio(
         readBytes = actualLen;
     }
 
+    // Always read synchronously for now
     return readBytes;
 }
 
-size_t VirtualFileSystemImpl_MCRAW::readFile(
-    const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const {
+int VirtualFileSystemImpl_MCRAW::readFile(
+    const Entry& entry,
+    FileRenderOptions options,
+    const size_t pos,
+    const size_t len,
+    void* dst,
+    std::function<void(size_t, int)> result,
+    bool async) {
 
     #ifdef _WIN32
         if(entry.name == "desktop.ini") {
@@ -414,17 +456,17 @@ size_t VirtualFileSystemImpl_MCRAW::readFile(
         }
     #endif
 
+    std::lock_guard<std::mutex> lock(mMutex);
+
     // Requestion audio?
     if(boost::ends_with(entry.name, "wav")) {
-        return generateAudio(entry, options, pos, len, dst, result);
+        return generateAudio(entry, options, pos, len, dst, result, async);
     }
     else if(boost::ends_with(entry.name, "dng")) {
-        return generateFrame(entry, options, pos, len, dst, result);
+        return generateFrame(entry, options, pos, len, dst, result, async);
     }
 
-    result(0, -1);
-
-    return 0;
+    return -1;
 }
 
 void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {

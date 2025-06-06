@@ -13,6 +13,8 @@
 
 #ifdef _WIN32
 #include "win/FuseFileSystemImpl_Win.h"
+#elif __APPLE__
+#include "macos/FuseFileSystemImpl_MacOS.h"
 #endif
 
 namespace {
@@ -44,6 +46,8 @@ MainWindow::MainWindow(QWidget *parent)
 
 #ifdef _WIN32
     mFuseFilesystem = std::make_unique<motioncam::FuseFileSystemImpl_Win>();
+#elif __APPLE__
+    mFuseFilesystem = std::make_unique<motioncam::FuseFileSystemImpl_MacOs>();
 #endif
 
     // Enable drag and drop on the scroll area
@@ -79,7 +83,7 @@ void MainWindow::saveSettings() {
     // Save mounted files
     settings.beginWriteArray("mountedFiles");
 
-    for (int i = 0; i < mMountedFiles.size(); ++i) {
+    for (auto i = 0; i < mMountedFiles.size(); ++i) {
         settings.setArrayIndex(i);
         settings.setValue("srcFile", mMountedFiles[i].srcFile);
     }
@@ -110,11 +114,11 @@ void MainWindow::restoreSettings() {
         ui->draftQuality->setCurrentIndex(2);
 
     // Restore mounted files
-    int size = settings.beginReadArray("mountedFiles");
+    auto size = settings.beginReadArray("mountedFiles");
     for (int i = 0; i < size; ++i) {
         settings.setArrayIndex(i);
 
-        QString srcFile = settings.value("srcFile").toString();
+        auto srcFile = settings.value("srcFile").toString();
         if(QFile::exists(srcFile)) // Mount files that exist
             mountFile(srcFile);
     }
@@ -126,11 +130,14 @@ void MainWindow::restoreSettings() {
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
     if (watched == ui->dragAndDropScrollArea) {
         if (event->type() == QEvent::DragEnter) {
-            QDragEnterEvent *dragEvent = static_cast<QDragEnterEvent*>(event);
+            auto* dragEvent = static_cast<QDragEnterEvent*>(event);
+
             if (dragEvent->mimeData()->hasUrls()) {
+                const auto urls = dragEvent->mimeData()->urls();
+
                 // Check if at least one file has the extension we want
-                for (const QUrl &url : dragEvent->mimeData()->urls()) {
-                    QString filePath = url.toLocalFile();
+                for (const auto& url : urls) {
+                    auto filePath = url.toLocalFile();
 
                     // Replace ".txt" with your desired file extension
                     if (filePath.endsWith(".mcraw", Qt::CaseInsensitive)) {
@@ -143,11 +150,13 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
             return true;
         }
         else if (event->type() == QEvent::Drop) {
-            QDropEvent *dropEvent = static_cast<QDropEvent*>(event);
+            auto* dropEvent = static_cast<QDropEvent*>(event);
 
             if (dropEvent->mimeData()->hasUrls()) {
-                for (const QUrl &url : dropEvent->mimeData()->urls()) {
-                    QString filePath = url.toLocalFile();
+                const auto urls = dropEvent->mimeData()->urls();
+
+                for (const auto& url : urls) {
+                    auto filePath = url.toLocalFile();
                     if (filePath.endsWith(".mcraw", Qt::CaseInsensitive)) {
                         mountFile(filePath);
                     }
@@ -166,8 +175,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
 void MainWindow::mountFile(const QString& filePath) {
     // Extract just the filename from the path
     QFileInfo fileInfo(filePath);
-    QString fileName = fileInfo.fileName();
-    QString dstPath = (mCacheRootFolder.isEmpty() ? fileInfo.path() : mCacheRootFolder) + "/" + fileInfo.baseName();
+    auto fileName = fileInfo.fileName();
+    auto dstPath = (mCacheRootFolder.isEmpty() ? fileInfo.path() : mCacheRootFolder) + "/" + fileInfo.baseName();
     motioncam::MountId mountId;
 
     try {
@@ -184,21 +193,21 @@ void MainWindow::mountFile(const QString& filePath) {
     }
 
     // Get the scroll area's content widget and its layout
-    QWidget* scrollContent = ui->dragAndDropScrollArea->widget();
-    QVBoxLayout* scrollLayout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
+    auto* scrollContent = ui->dragAndDropScrollArea->widget();
+    auto* scrollLayout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
 
     // Create a widget to hold a filename label and remove button
-    QWidget* fileWidget = new QWidget(scrollContent);
+    auto* fileWidget = new QWidget(scrollContent);
 
     fileWidget->setFixedHeight(50);
     fileWidget->setProperty("filePath", filePath);
     fileWidget->setProperty("mountId", mountId);
 
-    QHBoxLayout* fileLayout = new QHBoxLayout(fileWidget);
+    auto* fileLayout = new QHBoxLayout(fileWidget);
     fileLayout->setContentsMargins(5, 5, 5, 5);
 
     // Create and add the filename label
-    QLabel* fileLabel = new QLabel(fileName, fileWidget);
+    auto* fileLabel = new QLabel(fileName, fileWidget);
 
     fileLabel->setToolTip(filePath); // Show full path on hover
     fileLayout->addWidget(fileLabel);
@@ -207,7 +216,7 @@ void MainWindow::mountFile(const QString& filePath) {
     fileLayout->addStretch();
 
     // Create and add the remove button
-    QPushButton* playButton = new QPushButton("Play", fileWidget);
+    auto* playButton = new QPushButton("Play", fileWidget);
 
     playButton->setMaximumWidth(100);
     playButton->setMaximumHeight(30);
@@ -216,7 +225,7 @@ void MainWindow::mountFile(const QString& filePath) {
     fileLayout->addWidget(playButton);
 
     // Create and add the remove button
-    QPushButton* removeButton = new QPushButton("Remove", fileWidget);
+    auto* removeButton = new QPushButton("Remove", fileWidget);
 
     removeButton->setMaximumWidth(100);
     removeButton->setMaximumHeight(30);
@@ -253,8 +262,8 @@ void MainWindow::playFile(const QString& path) {
 }
 
 void MainWindow::removeFile(QWidget* fileWidget) {
-    QWidget* scrollContent = ui->dragAndDropScrollArea->widget();
-    QVBoxLayout* scrollLayout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
+    auto* scrollContent = ui->dragAndDropScrollArea->widget();
+    auto* scrollLayout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
 
     scrollLayout->removeWidget(fileWidget);
     fileWidget->deleteLater();
@@ -266,7 +275,7 @@ void MainWindow::removeFile(QWidget* fileWidget) {
 
     // Unmount the file
     bool ok = false;
-    motioncam::MountId mountId = fileWidget->property("mountId").toInt(&ok);
+    auto mountId = fileWidget->property("mountId").toInt(&ok);
     if(ok)
         mFuseFilesystem->unmount(mountId);
 }
@@ -313,7 +322,7 @@ void MainWindow::onDraftModeQualityChanged(int index) {
 void MainWindow::onSetCacheFolder(bool checked) {
     Q_UNUSED(checked);  // Parameter not needed for folder selection
 
-    QString folderPath = QFileDialog::getExistingDirectory(
+    auto folderPath = QFileDialog::getExistingDirectory(
         this,
         tr("Select Cache Root Folder"),
         QString(),  // Start from default location

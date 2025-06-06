@@ -57,6 +57,14 @@ if(WIN32)
     find_library(projected-fs ProjectedFSLib)
 
     set(platform-specific ${projected-fs})
+elseif(APPLE)
+  list(APPEND PROJECT_SOURCES
+      src/macos/FuseFileSystemImpl_MacOS.cpp
+      include/macos/FuseFileSystemImpl_MacOS.h)
+
+  find_library(fuse_t fuse_t)
+
+  set(platform-specific ${fuse_t})
 endif()
 
 set(CMAKE_AUTOUIC_SEARCH_PATHS ui)
@@ -85,6 +93,28 @@ else()
 endif()
 
 target_include_directories(motioncam-fs PRIVATE include)
+
+target_compile_definitions(motioncam-fs PRIVATE _FILE_OFFSET_BITS=64 FUSE_USE_VERSION=26)
+
+# # Debug configuration with sanitizers
+# if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+#     target_compile_options(motioncam-fs PRIVATE
+#         -fsanitize=address,undefined
+#         -fsanitize-address-use-after-scope
+#         -fno-sanitize-recover=all
+#         -fstack-protector-strong
+#         -g
+#         -O0
+#         -fno-omit-frame-pointer  # Better stack traces
+#     )
+
+#     target_link_options(motioncam-fs PRIVATE
+#       -fsanitize=address,undefined
+#       -fsanitize-address-use-after-scope
+#       -fno-sanitize-recover=all
+#       -fstack-protector-strong
+#     )
+# endif()
 
 # Add motioncam decoder as static library
 add_library(motioncam-decoder STATIC

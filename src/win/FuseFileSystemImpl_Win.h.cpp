@@ -24,8 +24,6 @@ namespace lcv = boost::locale::conv;
 
 namespace motioncam {
 
-constexpr auto CACHE_SIZE = 512 * 1024 * 1024;
-
 namespace {
 
     inline std::wstring fromUTF8(const std::string& s)

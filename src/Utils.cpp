@@ -525,8 +525,10 @@ std::shared_ptr<std::vector<char>> generateDng(
     // Reserve enough to fit the data
     output->reserve(width*height*sizeof(uint16_t) + 512*1024);
 
-    boost::iostreams::back_insert_device<std::vector<char>> sink(*output);
-    boost::iostreams::stream<boost::iostreams::back_insert_device<std::vector<char>>> stream(sink);
+    // boost::iostreams::back_insert_device<std::vector<char>> sink(*output);
+    // boost::iostreams::stream<boost::iostreams::back_insert_device<std::vector<char>>> stream(sink);
+
+    utils::vector_ostream stream(*output);
 
     writer.WriteToFile(stream, &err);
 
