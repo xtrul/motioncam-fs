@@ -301,10 +301,12 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
         int srcBits = bitsNeeded(static_cast<unsigned short>(cameraConfiguration.whiteLevel));
         int useBits = srcBits;
 
-        if(normaliseShadingMap)
-            useBits = 14; // always process at 14-bit when scaling RAW
+        if(srcBits == 10)
+            useBits = std::min(16, srcBits + 4); // use 14-bit when source is 10-bit
+        else if(srcBits == 12)
+            useBits = 16; // always use 16-bit when source is 12-bit
         else
-            useBits = std::min(14, srcBits + 2);
+            useBits = std::min(16, srcBits + 2);
 
         dstWhiteLevel = std::pow(2.0f, useBits) - 1;
         for(auto& v : dstBlackLevel)
