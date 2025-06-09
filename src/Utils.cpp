@@ -5,6 +5,7 @@
 #include "CameraMetadata.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <boost/iostreams/stream.hpp>
 #include <boost/iostreams/device/back_inserter.hpp>
@@ -297,10 +298,17 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
 
     // When applying shading map, increase precision
     if(applyShadingMap) {
-        int useBits = std::min(16, bitsNeeded(static_cast<unsigned short>(cameraConfiguration.whiteLevel)) + 2);
+        int srcBits = bitsNeeded(static_cast<unsigned short>(cameraConfiguration.whiteLevel));
+        int useBits = srcBits;
+
+        if(normaliseShadingMap)
+            useBits = 14; // always process at 14-bit when scaling RAW
+        else
+            useBits = std::min(14, srcBits + 2);
+
         dstWhiteLevel = std::pow(2.0f, useBits) - 1;
         for(auto& v : dstBlackLevel)
-            v <<= 2;
+            v <<= (useBits - srcBits);
 
         if(normaliseShadingMap)
             normalizeShadingMap(lensShadingMap);
@@ -471,7 +479,7 @@ std::shared_ptr<std::vector<char>> generateDng(
     int hours = (int) floor(time / 3600);
     int minutes = ((int) floor(time / 60)) % 60;
     int seconds = ((int) floor(time)) % 60;
-    int frames = recordingFps > 1 ? (frameNumber % ((int) round(recordingFps))) : 0;
+    int frames = recordingFps > 1 ? (frameNumber % static_cast<int>(std::round(recordingFps))) : 0;
 
     std::vector<uint8_t> timeCode(8);
 
