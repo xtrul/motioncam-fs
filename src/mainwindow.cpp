@@ -10,7 +10,6 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QSettings>
-#include <QDebug> // For qWarning, if not already included
 
 #ifdef _WIN32
 #include "win/FuseFileSystemImpl_Win.h"
@@ -100,7 +99,7 @@ void MainWindow::restoreSettings() {
     ui->scaleRawCheckBox->setCheckState(
         settings.value("scaleRaw").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
 
-    mCacheRootFolder = settings.value("cachePath").toString();
+    mCacheRootFolder = settings.value("cachePath").toString();    
     mDraftQuality = std::max(1, settings.value("draftQuality").toInt());
 
     if(mDraftQuality == 2)
@@ -181,7 +180,6 @@ void MainWindow::mountFile(const QString& filePath) {
     }
 
     if(mountId == motioncam::InvalidMountId) {
-        QMessageBox::critical(this, "Error", QString("Failed to mount file: %1. Invalid Mount ID received.").arg(filePath));
         return;
     }
 
@@ -193,8 +191,8 @@ void MainWindow::mountFile(const QString& filePath) {
     QWidget* fileWidget = new QWidget(scrollContent);
 
     fileWidget->setFixedHeight(50);
-    fileWidget->setProperty("filePath", filePath); // Store full path for potential use
-    fileWidget->setProperty("mountId", QVariant::fromValue(mountId)); // Store mountId
+    fileWidget->setProperty("filePath", filePath);
+    fileWidget->setProperty("mountId", mountId);
 
     QHBoxLayout* fileLayout = new QHBoxLayout(fileWidget);
     fileLayout->setContentsMargins(5, 5, 5, 5);
@@ -208,7 +206,7 @@ void MainWindow::mountFile(const QString& filePath) {
     // Add a spacer to push the button to the right
     fileLayout->addStretch();
 
-    // Create and add the play button
+    // Create and add the remove button
     QPushButton* playButton = new QPushButton("Play", fileWidget);
 
     playButton->setMaximumWidth(100);
@@ -233,11 +231,11 @@ void MainWindow::mountFile(const QString& filePath) {
     ui->dragAndDropLabel->hide();
 
     // Connect buttons
-    connect(playButton, &QPushButton::clicked, this, [this, filePath] { // filePath captured by value
+    connect(playButton, &QPushButton::clicked, this, [this, filePath] {
         playFile(filePath);
     });
 
-    connect(removeButton, &QPushButton::clicked, this, [this, fileWidget] { // fileWidget captured by value (pointer)
+    connect(removeButton, &QPushButton::clicked, this, [this, fileWidget] {
         removeFile(fileWidget);
     });
 
@@ -249,25 +247,14 @@ void MainWindow::playFile(const QString& path) {
     QStringList arguments;
     arguments << path;
 
-    // Corrected executable name
-    bool success = QProcess::startDetached("MotionCam_Player.exe", arguments);
-    if (!success) {
-        QMessageBox::warning(this, "Error", QString("Failed to launch player 'MotionCam_Player.exe' with file: %1. Ensure the player is in your system's PATH or in the application directory.").arg(path));
-    }
+    bool success = QProcess::startDetached("MCRAW_Player.exe", arguments);
+    if (!success)
+        QMessageBox::warning(this, "Error", QString("Failed to launch player with file: %1").arg(path));
 }
 
 void MainWindow::removeFile(QWidget* fileWidget) {
     QWidget* scrollContent = ui->dragAndDropScrollArea->widget();
     QVBoxLayout* scrollLayout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
-
-    // Store mountId before deleting the widget, as properties might become invalid
-    bool mountIdOk = false;
-    // Retrieve mountId correctly from QVariant
-    motioncam::MountId mountId = fileWidget->property("mountId").value<motioncam::MountId>();
-    if (fileWidget->property("mountId").isValid()) { // Check if property was set and retrieved
-        mountIdOk = true;
-    }
-
 
     scrollLayout->removeWidget(fileWidget);
     fileWidget->deleteLater();
@@ -277,26 +264,12 @@ void MainWindow::removeFile(QWidget* fileWidget) {
         ui->dragAndDropLabel->show();
     }
 
-    // Unmount the file from the FUSE system AND remove from internal list
-    if (mountIdOk && mountId != motioncam::InvalidMountId) {
+    // Unmount the file
+    bool ok = false;
+    motioncam::MountId mountId = fileWidget->property("mountId").toInt(&ok);
+    if(ok)
         mFuseFilesystem->unmount(mountId);
-
-        // Remove the file from the mMountedFiles list
-        // Iterate carefully, QList::removeAt can shift indices
-        for (int i = 0; i < mMountedFiles.size(); ++i) {
-            if (mMountedFiles.at(i).mountId == mountId) {
-                mMountedFiles.removeAt(i);
-                break; // Assuming mount IDs are unique and we only need to remove one
-            }
-        }
-    } else {
-        // Optional: Log an error or handle cases where mountId wasn't ok
-        // For example, if fileWidget didn't have a valid mountId property
-        // Using qWarning() requires #include <QDebug>
-        qWarning() << "Could not remove/unmount file: Invalid mountId retrieved from widget or widget property not set.";
-    }
 }
-
 
 void MainWindow::updateUi() {
     // Draft quality only enabled when draft mode is on
@@ -315,7 +288,6 @@ void MainWindow::updateUi() {
 }
 
 void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
-    Q_UNUSED(checkState); // To suppress unused parameter warning if state is not directly used
     auto it = mMountedFiles.begin();
     auto renderOptions = getRenderOptions(*ui);
 
@@ -335,8 +307,7 @@ void MainWindow::onDraftModeQualityChanged(int index) {
     else if(index == 2)
         mDraftQuality = 8;
 
-    // Trigger a general settings update, which will update FUSE options
-    onRenderSettingsChanged(Qt::CheckState::Checked); // Pass any state, it's not used by onRenderSettingsChanged directly
+    onRenderSettingsChanged(Qt::CheckState::Checked);
 }
 
 void MainWindow::onSetCacheFolder(bool checked) {
@@ -345,15 +316,10 @@ void MainWindow::onSetCacheFolder(bool checked) {
     QString folderPath = QFileDialog::getExistingDirectory(
         this,
         tr("Select Cache Root Folder"),
-        mCacheRootFolder.isEmpty() ? QString() : mCacheRootFolder,  // Start from current cache folder or default
+        QString(),  // Start from default location
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
     );
 
-    if (!folderPath.isEmpty()) { // Only update if a folder was selected
-        mCacheRootFolder = folderPath;
-        ui->cacheFolderLabel->setText(mCacheRootFolder);
-        // Note: This does not automatically re-mount existing files to the new cache.
-        // That would require unmounting and remounting all, which might be disruptive.
-        // New mounts will use the new cache path.
-    }
+    mCacheRootFolder = folderPath;
+    ui->cacheFolderLabel->setText(mCacheRootFolder);
 }
