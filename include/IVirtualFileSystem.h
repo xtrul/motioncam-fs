@@ -20,7 +20,6 @@ public:
     virtual std::optional<Entry> findEntry(const std::string& fullPath) const = 0;
     virtual int readFile(
         const Entry& entry,
-        FileRenderOptions options,
         const size_t pos,
         const size_t len,
         void* dst,

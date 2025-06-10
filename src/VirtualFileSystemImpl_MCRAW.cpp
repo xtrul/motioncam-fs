@@ -22,7 +22,6 @@
 namespace motioncam {
 
 namespace {
-    constexpr auto IO_THREADS = 4;
 
 #ifdef _WIN32
     constexpr std::string_view DESKTOP_INI = R"([.ShellClassInfo]
@@ -177,17 +176,27 @@ IconSize=16
 }
 
 VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
-    LRUCache& lruCache, FileRenderOptions options, int draftScale, const std::string& file) :
+        BS::thread_pool& ioThreadPool,
+        BS::thread_pool& processingThreadPool,
+        LRUCache& lruCache,
+        FileRenderOptions options,
+        int draftScale,
+        const std::string& file) :
         mCache(lruCache),
-        mIoThreadPool(std::make_unique<BS::thread_pool>(IO_THREADS)),
-        mProcessingThreadPool(std::make_unique<BS::thread_pool>()),
+        mIoThreadPool(ioThreadPool),
+        mProcessingThreadPool(processingThreadPool),
         mSrcPath(file),
         mBaseName(extractFilenameWithoutExtension(file)),
         mTypicalDngSize(0),
         mFps(0),
-        mDraftScale(draftScale) {
+        mDraftScale(draftScale),
+        mOptions(options) {
 
     init(options);
+}
+
+VirtualFileSystemImpl_MCRAW::~VirtualFileSystemImpl_MCRAW() {
+    spdlog::info("Destroying VirtualFileSystemImpl_MCRAW({})", mSrcPath);
 }
 
 void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
@@ -230,6 +239,7 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
 
     mFiles.reserve(frames.size()*2);
 
+// Disable icon previews in Windows/MacOS
 #ifdef _WIN32
     Entry desktopIni;
 
@@ -306,7 +316,6 @@ std::optional<Entry> VirtualFileSystemImpl_MCRAW::findEntry(const std::string& f
 
 size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const Entry& entry,
-    FileRenderOptions options,
     const size_t pos,
     const size_t len,
     void* dst,
@@ -328,18 +337,18 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     }
 
     // Use IO thread pool to decode frame
-    auto frameDataFuture = mIoThreadPool->submit_task([this, entry, options]() -> FrameData {
+    auto frameDataFuture = mIoThreadPool.submit_task([entry, &srcPath = mSrcPath, &options = mOptions]() -> FrameData {
         thread_local std::map<std::string, std::unique_ptr<Decoder>> decoders;
 
         auto timestamp = std::get<Timestamp>(entry.userData);
 
         spdlog::debug("Reading frame {} with options {}", timestamp, optionsToString(options));
 
-        if(decoders.find(mSrcPath) == decoders.end()) {
-            decoders[mSrcPath] = std::make_unique<Decoder>(mSrcPath);
+        if(decoders.find(srcPath) == decoders.end()) {
+            decoders[srcPath] = std::make_unique<Decoder>(srcPath);
         }
 
-        auto& decoder = decoders[mSrcPath];
+        auto& decoder = decoders[srcPath];
         auto data = std::make_shared<std::vector<uint8_t>>();
 
         nlohmann::json metadata;
@@ -367,7 +376,7 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    auto generateTask = [&cache = mCache, entry, sharableFuture, fps, draftScale, options, pos, len, dst, result]() {
+    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
@@ -409,14 +418,13 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     if(!async)
         return generateTask();
 
-    (void)mProcessingThreadPool->submit_task(generateTask);
+    (void)mProcessingThreadPool.submit_task(generateTask);
 
     return 0;
 }
 
 size_t VirtualFileSystemImpl_MCRAW::generateAudio(
     const Entry& entry,
-    FileRenderOptions options,
     const size_t pos,
     const size_t len,
     void* dst,
@@ -440,7 +448,6 @@ size_t VirtualFileSystemImpl_MCRAW::generateAudio(
 
 int VirtualFileSystemImpl_MCRAW::readFile(
     const Entry& entry,
-    FileRenderOptions options,
     const size_t pos,
     const size_t len,
     void* dst,
@@ -456,14 +463,12 @@ int VirtualFileSystemImpl_MCRAW::readFile(
         }
     #endif
 
-    std::lock_guard<std::mutex> lock(mMutex);
-
     // Requestion audio?
     if(boost::ends_with(entry.name, "wav")) {
-        return generateAudio(entry, options, pos, len, dst, result, async);
+        return generateAudio(entry, pos, len, dst, result, async);
     }
     else if(boost::ends_with(entry.name, "dng")) {
-        return generateFrame(entry, options, pos, len, dst, result, async);
+        return generateFrame(entry, pos, len, dst, result, async);
     }
 
     return -1;
@@ -471,6 +476,7 @@ int VirtualFileSystemImpl_MCRAW::readFile(
 
 void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
     mDraftScale = draftScale;
+    mOptions = options;
 
     init(options);
 }

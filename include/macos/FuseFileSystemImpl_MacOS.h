@@ -5,6 +5,10 @@
 
 #include "IFuseFileSystem.h"
 
+namespace BS {
+    class thread_pool;
+}
+
 namespace motioncam {
 
 struct Session;
@@ -25,6 +29,8 @@ public:
 private:
     MountId mNextMountId;
     std::map<MountId, std::unique_ptr<Session>> mMountedFiles;
+    std::unique_ptr<BS::thread_pool> mIoThreadPool;
+    std::unique_ptr<BS::thread_pool> mProcessingThreadPool;
     std::unique_ptr<LRUCache> mCache;
 };
 

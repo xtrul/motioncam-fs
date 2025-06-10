@@ -14,14 +14,21 @@ class LRUCache;
 class VirtualFileSystemImpl_MCRAW : public IVirtualFileSystem
 {
 public:
-    VirtualFileSystemImpl_MCRAW(LRUCache& lruCache, FileRenderOptions options, int draftScale, const std::string& file);
+    VirtualFileSystemImpl_MCRAW(
+        BS::thread_pool& ioThreadPool,
+        BS::thread_pool& processingThreadPool,
+        LRUCache& lruCache,
+        FileRenderOptions options,
+        int draftScale,
+        const std::string& file);
+
+    ~VirtualFileSystemImpl_MCRAW();
 
     std::vector<Entry> listFiles(const std::string& filter = "") const override;
     std::optional<Entry> findEntry(const std::string& fullPath) const override;
 
     int readFile(
         const Entry& entry,
-        FileRenderOptions options,
         const size_t pos,
         const size_t len,
         void* dst,
@@ -35,7 +42,6 @@ private:
 
     size_t generateFrame(
         const Entry& entry,
-        FileRenderOptions options,
         const size_t pos,
         const size_t len,
         void* dst,
@@ -44,7 +50,6 @@ private:
 
     size_t generateAudio(
         const Entry& entry,
-        FileRenderOptions options,
         const size_t pos,
         const size_t len,
         void* dst,
@@ -53,14 +58,15 @@ private:
 
 private:
     LRUCache& mCache;
-    std::unique_ptr<BS::thread_pool> mIoThreadPool;
-    std::unique_ptr<BS::thread_pool> mProcessingThreadPool;
+    BS::thread_pool& mIoThreadPool;
+    BS::thread_pool& mProcessingThreadPool;
     const std::string mSrcPath;
     const std::string mBaseName;
     size_t mTypicalDngSize;
     std::vector<Entry> mFiles;
     std::vector<uint8_t> mAudioFile;
     int mDraftScale;
+    FileRenderOptions mOptions;
     float mFps;
     std::mutex mMutex;
 };

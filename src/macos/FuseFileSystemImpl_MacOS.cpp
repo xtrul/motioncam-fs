@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <BS_thread_pool.hpp>
+
 #include <fuse_t/fuse_t.h>
 
 #include <QDir>
@@ -21,21 +22,9 @@ namespace fs = boost::filesystem;
 namespace motioncam {
 
 constexpr auto CACHE_SIZE = 1024 * 1024 * 1024; // 1 GB cache size
+constexpr auto IO_THREADS = 4;
 
 namespace {
-
-bool isMacOsMetadataFile(const std::string& path)  {
-    if (path == ".DS_Store"    ||
-        path == "._"           ||
-        path == ".Spotlight-"  ||
-        path == ".fseventsd"   ||
-        path == ".Trashes")
-    {
-        return true;
-    }
-
-    return false;
-}
 
 void setupLogging() {
     try {
@@ -75,16 +64,19 @@ void setupLogging() {
 //
 
 struct FuseContext {
-    std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs;
+    VirtualFileSystemImpl_MCRAW* fs;
+    std::atomic_int nextFileHandle;
 };
 
 class Session {
 public:
-    Session(const std::string& srcFile, const std::string& dstPath, std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs);
+    Session(const std::string& srcFile, const std::string& dstPath, VirtualFileSystemImpl_MCRAW* fs);
     ~Session();
 
+    void updateOptions(FileRenderOptions options, int draftScale);
+
 private:
-    void init(std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs);
+    void init(VirtualFileSystemImpl_MCRAW* fs);
 
     void fuseMain(struct fuse_chan* ch, struct fuse* fuse);
 
@@ -100,30 +92,33 @@ private:
     std::string mSrcFile;
     std::string mDstPath;
     std::unique_ptr<std::thread> mThread;
+    VirtualFileSystemImpl_MCRAW* mFs;
     struct fuse_chan* mFuseCh;
     struct fuse* mFuse;
 };
 
 
-Session::Session(const std::string& srcFile, const std::string& dstPath, std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs) :
+Session::Session(const std::string& srcFile, const std::string& dstPath, VirtualFileSystemImpl_MCRAW* fs) :
     mSrcFile(srcFile),
     mDstPath(dstPath),
+    mFs(fs),
     mFuseCh(nullptr),
     mFuse(nullptr)
 {
-    init(std::move(fs));
+    init(fs);
 }
 
 Session::~Session() {
-    fuse_unmount("/Users/mirsadm/workspace/tmp", mFuseCh);
+    if(mFuseCh)
+        fuse_unmount(mDstPath.c_str(), mFuseCh);
 
-    fuse_destroy(mFuse);
-
-    if(mThread->joinable())
+    if(mThread && mThread->joinable())
         mThread->join();
+
+    spdlog::debug("Exiting session for {}", mSrcFile);
 }
 
-void Session::init(std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs) {
+void Session::init(VirtualFileSystemImpl_MCRAW* fs) {
     // FUSE operations structure
     struct fuse_operations ops = {};
 
@@ -140,23 +135,32 @@ void Session::init(std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs) {
     // Read only
     fuse_opt_add_arg(&args, "-r");
     fuse_opt_add_arg(&args, "-o");
+    fuse_opt_add_arg(&args, "nobrowse");
+    fuse_opt_add_arg(&args, "-o");
+    fuse_opt_add_arg(&args, "rwsize=262144");
+    fuse_opt_add_arg(&args, "-o");
     fuse_opt_add_arg(&args, "nonamedattr");
     fuse_opt_add_arg(&args, "-o");
     fuse_opt_add_arg(&args, "nomtime");
-
+    fuse_opt_add_arg(&args, "-o");
+    fuse_opt_add_arg(&args, "noappledouble");
+    fuse_opt_add_arg(&args, "-o");
+    fuse_opt_add_arg(&args, "noapplexattr");
 
     auto* context = new FuseContext();
-    context->fs = std::move(fs);
 
-    struct fuse_chan* ch = fuse_mount("/Users/mirsadm/workspace/tmp", &args);
+    context->fs = fs;
+    context->nextFileHandle = 0;
+
+    struct fuse_chan* ch = fuse_mount(mDstPath.c_str(), &args);
     struct fuse* fuse = fuse_new(ch, &args, &ops, sizeof(ops), context);
 
     // Clean up
     fuse_opt_free_args(&args);
 
     if (fuse == nullptr) {
-        free(context);
-        throw std::runtime_error("Failed to create mount point");
+        delete context;
+        throw std::runtime_error("Failed to create mount point (path: " + mDstPath + ")");
     }
 
     mFuseCh = ch;
@@ -167,15 +171,19 @@ void Session::init(std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs) {
 
 }
 
-void Session::fuseMain(struct fuse_chan* ch, struct fuse* fuse)
-{
+void Session::updateOptions(FileRenderOptions options, int draftScale) {
+    mFs->updateOptions(options, draftScale);
+
+    fuse_invalidate_path(mFuse, mDstPath.c_str());
+
+}
+
+void Session::fuseMain(struct fuse_chan* ch, struct fuse* fuse) {
     int res = fuse_loop_mt(fuse);
 
+    fuse_destroy(fuse);
+
     spdlog::info("Fuse has exited with code {}", res);
-
-    // fuse_unmount("/Users/mirsadm/workspace/tmp", ch);
-
-    // fuse_destroy(fuse);
 }
 
 FuseContext* fuseGetContext() {
@@ -191,6 +199,15 @@ void* Session::fuseInit(struct fuse_conn_info* conn) {
 }
 
 void Session::fuseDestroy(void* privateData) {
+    auto* context = reinterpret_cast<FuseContext*>(privateData);
+
+    if(context->fs)
+        delete context->fs;
+
+    context->fs = nullptr;
+    context->nextFileHandle = INT_MIN;
+
+    delete context;
 }
 
 int Session::fuseGetattr(const char* path, struct stat* stbuf) {
@@ -201,11 +218,8 @@ int Session::fuseGetattr(const char* path, struct stat* stbuf) {
     auto* context = fuseGetContext();
     std::string pathStr(path);
 
-    if (isMacOsMetadataFile(path))
-        return -ENOENT;
-
     // Root directory
-    if (pathStr == "/") {
+    if (pathStr == "/" || pathStr == "//") {
         stbuf->st_mode = S_IFDIR | 0755;
         stbuf->st_nlink = 2;
 
@@ -242,29 +256,26 @@ int Session::fuseGetattr(const char* path, struct stat* stbuf) {
 int Session::fuseReaddir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi) {
     spdlog::debug("fuse_read_dir(path: {})", path);
 
-    filler(buf, ".", nullptr, 0);
-    filler(buf, "..", nullptr, 0);
-
     auto* context = fuseGetContext();
     std::string pathStr(path);
 
-    if (pathStr == "/") {
-        pathStr = "";
-    }
-    else {
-        pathStr = pathStr.substr(1); // Remove leading slash
+    if(pathStr == "//" || pathStr == "/") {
+        filler(buf, ".", nullptr, 0);
+        filler(buf, "..", nullptr, 0);
+
+        auto files = context->fs->listFiles("/");
+        for(auto& entry : files) {
+            filler(buf, entry.getFullPath().c_str(), nullptr, 0);
+        }
+
+        return 0;
     }
 
-    auto files = context->fs->listFiles(pathStr);
-    for(auto& entry : files) {
-        filler(buf, entry.getFullPath().c_str(), nullptr, 0);
-    }
-
-    return 0;
+    return -ENOENT;
 }
 
 int Session::fuseOpen(const char* path, struct fuse_file_info* fi) {
-    spdlog::debug("open(fuse_path: {})", path);
+    spdlog::debug("fuse_open(path: {})", path);
 
     auto* context = fuseGetContext();
     std::string pathStr(path);
@@ -277,6 +288,10 @@ int Session::fuseOpen(const char* path, struct fuse_file_info* fi) {
     // Only allow read access
     if ((fi->flags & 3) != O_RDONLY)
         return -EACCES;
+
+
+    // Set file handle
+    fi->fh = ++context->nextFileHandle;
 
     return 0;
 }
@@ -294,7 +309,6 @@ int Session::fuseRead(const char* path, char* buf, size_t size, off_t offset, st
 
     return context->fs->readFile(
         entry.value(),
-        FileRenderOptions::RENDER_OPT_NONE,
         offset,
         size,
         buf,
@@ -311,12 +325,22 @@ int Session::fuseRelease(const char* path, struct fuse_file_info* fi) {
 
 FuseFileSystemImpl_MacOs::FuseFileSystemImpl_MacOs() :
     mNextMountId(0),
+    mIoThreadPool(std::make_unique<BS::thread_pool>(IO_THREADS)),
+    mProcessingThreadPool(std::make_unique<BS::thread_pool>()),
     mCache(std::make_unique<LRUCache>(CACHE_SIZE))
 {
     setupLogging();
 }
 
 FuseFileSystemImpl_MacOs::~FuseFileSystemImpl_MacOs() {
+    mMountedFiles.clear();
+
+    // Wait for tasks to complete before we destroy ourselves
+    mIoThreadPool->wait();
+
+    mProcessingThreadPool->wait();
+
+    spdlog::info("Destroying FuseFileSystemImpl_MacOs()");
 }
 
 MountId FuseFileSystemImpl_MacOs::mount(
@@ -327,7 +351,7 @@ MountId FuseFileSystemImpl_MacOs::mount(
 
     spdlog::debug("Mounting file {} to {}", srcFile, dstPath);
 
-    QDir dst;
+    QDir dst(dstPath.c_str());
 
     if(!dst.exists()) {
         spdlog::info("Creating path {}, dstPath");
@@ -345,8 +369,16 @@ MountId FuseFileSystemImpl_MacOs::mount(
         size_t stack_size = 0;
 
         try {
-            auto fs = std::make_unique<VirtualFileSystemImpl_MCRAW>(*mCache, options, draftScale, srcFile);
-            auto session = std::make_unique<Session>(srcFile, dstPath, std::move(fs));
+            auto* fs =
+                new VirtualFileSystemImpl_MCRAW(
+                    *mIoThreadPool,
+                    *mProcessingThreadPool,
+                    *mCache,
+                    options,
+                    draftScale,
+                    srcFile);
+
+            auto session = std::make_unique<Session>(srcFile, dstPath, fs);
 
             if(!session) {
                 spdlog::error("Failed to mount {} to {}", srcFile, dstPath);
@@ -377,6 +409,10 @@ void FuseFileSystemImpl_MacOs::unmount(MountId mountId) {
 }
 
 void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
+    auto it = mMountedFiles.find(mountId);
+    if(it != mMountedFiles.end()) {
+        it->second->updateOptions(options, draftScale);
+    }
 }
 
 } // namespace motioncam
