@@ -118,6 +118,10 @@ IconSize=16
     void syncAudio(Timestamp videoTimestamp, std::vector<AudioChunk>& audioChunks, int sampleRate, int numChannels) {
         // Calculate drift between the video and audio
         auto audioVideoDriftMs = (audioChunks[0].first - videoTimestamp) * 1e-6f;
+        if(std::abs(audioVideoDriftMs) > 1000) {
+            spdlog::warn("Audio drift too large, not syncing audio");
+            return;
+        }
 
         if(audioVideoDriftMs > 0) {
             // Calculate how many audio frames to remove
@@ -250,7 +254,7 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
     mFiles.emplace_back(desktopIni);
 #endif
 
-    // Generate and add audio (TODO: We're loading all the audio into memory + trim to sync with video)
+    // Generate and add audio (TODO: We're loading all the audio into memory)
     Entry audioEntry;
 
     std::vector<AudioChunk> audioChunks;

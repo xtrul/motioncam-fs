@@ -354,7 +354,7 @@ MountId FuseFileSystemImpl_MacOs::mount(
     QDir dst(dstPath.c_str());
 
     if(!dst.exists()) {
-        spdlog::info("Creating path {}, dstPath");
+        spdlog::info("Creating path {}", dstPath);
 
         if(!dst.mkpath(dstPath.c_str())) {
             spdlog::error("Could not create path {}", dstPath);
