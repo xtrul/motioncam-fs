@@ -12,8 +12,6 @@ namespace BS {
 namespace motioncam {
 
 struct Session;
-
-class VirtualFileSystemImpl_MCRAW;
 class LRUCache;
 
 class FuseFileSystemImpl_MacOs : public IFuseFileSystem

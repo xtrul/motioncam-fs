@@ -46,12 +46,12 @@ if(WIN32)
     list(APPEND PROJECT_SOURCES
         resources/app.rc
 
-        src/win/fusefilesystemimpl_win.cpp
+        src/win/FuseFileSystemImpl_Win.cpp
         src/win/virtualizationInstance.cpp
         src/win/dirInfo.cpp
 
         include/win/dirInfo.h
-        include/win/fusefilesystemimpl_win.h
+        include/win/FuseFileSystemImpl_Win.h
         include/win/virtualizationInstance.h)
 
     find_library(projected-fs ProjectedFSLib)

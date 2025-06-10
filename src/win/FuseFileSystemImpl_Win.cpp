@@ -3,6 +3,7 @@
 #include "win/virtualizationInstance.h"
 
 #include "VirtualFileSystemImpl_MCRAW.h"
+#include "LRUCache.h"
 
 #include <iostream>
 #include <ntstatus.h>
@@ -11,6 +12,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/locale.hpp>
+
+#include <BS_thread_pool.hpp>
 
 // Logging
 #include <spdlog/spdlog.h>
@@ -23,6 +26,9 @@ namespace fs = boost::filesystem;
 namespace lcv = boost::locale::conv;
 
 namespace motioncam {
+
+constexpr auto CACHE_SIZE = 128 * 1024 * 1024; // Small cache size as we write the files to disk
+constexpr auto IO_THREADS = 4;
 
 namespace {
 
@@ -71,12 +77,7 @@ namespace {
 
 class Session : public VirtualizationInstance {
 public:
-    Session(
-        FileRenderOptions options,
-        int draftScale,
-        const std::string& srcFile,
-        const std::string& dstPath);
-
+    Session(const std::string& dstPath, std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs);
     ~Session();
 
 public:
@@ -113,13 +114,8 @@ private:
 };
 
 Session::Session(
-    FileRenderOptions options,
-    int draftScale,
-    const std::string& srcFile,
-    const std::string& dstPath) :
-    mOptions(options),
-    mDraftScale(draftScale),
-    mFs(std::make_unique<VirtualFileSystemImpl_MCRAW>(options, draftScale, srcFile))
+    const std::string& dstPath,
+    std::unique_ptr<VirtualFileSystemImpl_MCRAW> fs) : mFs(std::move(fs))
 {
     SetOptionalMethods(OptionalMethods::Notify);
 
@@ -419,11 +415,11 @@ HRESULT Session::GetFileData(_In_ const PRJ_CALLBACK_DATA* callbackData, _In_ UI
     // Read the data asynchronously
     auto result = mFs->readFile(
         *fsEntry,
-        static_cast<FileRenderOptions>(options),
         byteOffset,
         length,
         writeBuffer,
-        asyncCompleteTransaction);
+        asyncCompleteTransaction,
+        true);
 
     if(result > 0) {
         completeTransaction(result, 0, false);
@@ -506,7 +502,11 @@ void setupLogging() {
 } // namespace
 
 FuseFileSystemImpl_Win::FuseFileSystemImpl_Win() :
-    mNextMountId(0) {
+    mNextMountId(0),
+    mIoThreadPool(std::make_unique<BS::thread_pool>(IO_THREADS)),
+    mProcessingThreadPool(std::make_unique<BS::thread_pool>()),
+    mCache(std::make_unique<LRUCache>(CACHE_SIZE))
+{
     setupLogging();
 }
 
@@ -520,7 +520,9 @@ MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, int draftScale,
         auto mountId = mNextMountId++;
 
         try {
-            mMountedFiles[mountId] = std::make_unique<Session>(options, draftScale, srcFile, dstPath);
+            auto fs = std::make_unique<VirtualFileSystemImpl_MCRAW>(*mIoThreadPool, *mProcessingThreadPool, *mCache, options, draftScale, srcFile);
+
+            mMountedFiles[mountId] = std::make_unique<Session>(dstPath, std::move(fs));
         }
         catch(std::runtime_error& e) {
             spdlog::error("Failed to mount {} to {} (error: {})", srcFile, dstPath, e.what());
