@@ -343,12 +343,6 @@ HRESULT Session::GetFileData(_In_ const PRJ_CALLBACK_DATA* callbackData, _In_ UI
 
     HRESULT hr = S_OK;
 
-    auto options =
-        (uint32_t) callbackData->VersionInfo->ContentID[0]          |
-        ((uint32_t)callbackData->VersionInfo->ContentID[1] << 8)    |
-        ((uint32_t)callbackData->VersionInfo->ContentID[2] << 16)   |
-        ((uint32_t)callbackData->VersionInfo->ContentID[3] << 24);
-
     // Match file entry first
     auto fsEntry = mFs->findEntry(toUTF8(callbackData->FilePathName));
     if(!fsEntry) {
