@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 
+if(APPLE)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum OS X deployment version")
+endif()
+
 project(motioncam-fs VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
@@ -13,7 +17,7 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network)
 
 set(DEPENDENCIES_PATH deps)
-set(Boost_DEBUG 1)
+# set(Boost_DEBUG 1)
 
 set(PROJECT_SOURCES
         src/main.cpp
@@ -65,6 +69,7 @@ elseif(APPLE)
   find_library(fuse_t fuse_t)
 
   set(platform-specific ${fuse_t})
+
 endif()
 
 set(CMAKE_AUTOUIC_SEARCH_PATHS ui)
