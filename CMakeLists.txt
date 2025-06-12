@@ -23,6 +23,7 @@ set(PROJECT_SOURCES
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
         src/Utils.cpp
+        src/SettingsDialog.cpp
 
         include/mainwindow.h
         include/Types.h
@@ -36,8 +37,11 @@ set(PROJECT_SOURCES
         include/CameraMetadata.h
         include/CameraFrameMetadata.h
         include/Utils.h
+        include/SettingsDialog.h
+        include/MatrixProfile.h
 
         ui/mainwindow.ui
+        ui/SettingsDialog.ui
 )
 
 qt_add_resources(PROJECT_SOURCES resources.qrc)
@@ -125,7 +129,9 @@ find_package(fmt CONFIG REQUIRED)
 # set(Boost_USE_MULTITHREADED      ON)
 # set(Boost_USE_STATIC_RUNTIME    OFF)
 
-find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem algorithm locale)
+# Ubuntu packages currently provide Boost 1.83, so require that version or
+# newer. The algorithm headers are header only and don't need a component.
+find_package(Boost 1.83 REQUIRED COMPONENTS filesystem locale)
 # if(Boost_FOUND) # find_package with REQUIRED will FATAL_ERROR if not found
 #   include_directories(${Boost_INCLUDE_DIRS}) # Usually not needed with imported targets
 # endif()
@@ -135,7 +141,6 @@ target_link_libraries(motioncam-fs PRIVATE
   Qt${QT_VERSION_MAJOR}::Network
   # Use modern Boost imported targets
   Boost::filesystem
-  Boost::algorithm
   Boost::locale
   spdlog::spdlog
   fmt::fmt
