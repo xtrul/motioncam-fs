@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "SettingsDialog.h"
 
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -8,8 +9,14 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QMessageBox>
-#include <QFileDialog>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QCoreApplication>
 #include <QSettings>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <algorithm>
 
 #ifdef _WIN32
@@ -56,6 +63,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->dragAndDropScrollArea->installEventFilter(this);
 
     restoreSettings();
+    loadUniqueNamesFromFile();
+    loadMatrixProfilesFromFile();
 
     // Connect to widgets
     connect(ui->draftModeCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
@@ -63,7 +72,11 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->scaleRawCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
     connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
-    connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
+    connect(ui->actionOptions, &QAction::triggered, this, &MainWindow::onShowOptions);
+    connect(ui->actionUnmountAll, &QAction::triggered, this, &MainWindow::onUnmountAll);
+    connect(ui->actionExit, &QAction::triggered, this, &MainWindow::close);
+    connect(ui->actionDemo, &QAction::triggered, this, &MainWindow::onShowHelp);
+
 }
 
 MainWindow::~MainWindow() {
@@ -80,6 +93,7 @@ void MainWindow::saveSettings() {
     settings.setValue("scaleRaw", ui->scaleRawCheckBox->checkState() == Qt::CheckState::Checked);
     settings.setValue("cachePath", mCacheRootFolder);
     settings.setValue("draftQuality", mDraftQuality);
+    settings.setValue("matrixKey", mCurrentMatrixKey);
 
     // Save mounted files
     settings.beginWriteArray("mountedFiles");
@@ -104,8 +118,9 @@ void MainWindow::restoreSettings() {
     ui->scaleRawCheckBox->setCheckState(
         settings.value("scaleRaw").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
 
-    mCacheRootFolder = settings.value("cachePath").toString();    
+    mCacheRootFolder = settings.value("cachePath").toString();
     mDraftQuality = std::max(1, settings.value("draftQuality").toInt());
+    mCurrentMatrixKey = settings.value("matrixKey").toString();
 
     if(mDraftQuality == 2)
         ui->draftQuality->setCurrentIndex(0);
@@ -301,7 +316,6 @@ void MainWindow::updateUi() {
     else
         ui->scaleRawCheckBox->setEnabled(false);
 
-    ui->cacheFolderLabel->setText(mCacheRootFolder);
 }
 
 void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
@@ -327,16 +341,124 @@ void MainWindow::onDraftModeQualityChanged(int index) {
     onRenderSettingsChanged(Qt::CheckState::Checked);
 }
 
-void MainWindow::onSetCacheFolder(bool checked) {
-    Q_UNUSED(checked);  // Parameter not needed for folder selection
-
-    auto folderPath = QFileDialog::getExistingDirectory(
-        this,
-        tr("Select Cache Root Folder"),
-        QString(),  // Start from default location
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
-    );
-
-    mCacheRootFolder = folderPath;
-    ui->cacheFolderLabel->setText(mCacheRootFolder);
+void MainWindow::onShowOptions() {
+    SettingsDialog dlg(this);
+    dlg.setCachePath(mCacheRootFolder);
+    dlg.setUniqueNames(mUniqueNames);
+    dlg.setMatrixProfiles(mMatrixProfiles);
+    dlg.setCurrentMatrixKey(mCurrentMatrixKey);
+    if(dlg.exec() == QDialog::Accepted) {
+        mCacheRootFolder = dlg.cachePath();
+        mUniqueNames = dlg.uniqueNames();
+        mMatrixProfiles = dlg.matrixProfiles();
+        mCurrentMatrixKey = dlg.currentMatrixKey();
+        saveUniqueNamesToFile();
+        saveMatrixProfilesToFile();
+        saveSettings();
+        auto opts = getRenderOptions(*ui);
+        for(auto& mf : mMountedFiles)
+            mFuseFilesystem->updateOptions(mf.mountId, opts, mDraftQuality);
+    }
 }
+
+void MainWindow::onUnmountAll() {
+    while(!mMountedFiles.isEmpty()) {
+        auto w = mMountedFiles.takeFirst();
+        mFuseFilesystem->unmount(w.mountId);
+    }
+    auto* scrollContent = ui->dragAndDropScrollArea->widget();
+    auto* layout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
+    QLayoutItem* child;
+    while((child = layout->takeAt(0)) != nullptr) {
+        if(auto widget = child->widget()) widget->deleteLater();
+        delete child;
+    }
+    ui->dragAndDropLabel->show();
+}
+
+void MainWindow::onShowHelp() {
+    QDesktopServices::openUrl(QUrl::fromLocalFile(QCoreApplication::applicationDirPath()+"/help/index.html"));
+}
+
+void MainWindow::loadUniqueNamesFromFile() {
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/unique-name.json");
+    if(!file.open(QIODevice::ReadOnly))
+        return;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if(!doc.isObject())
+        return;
+    mUniqueNames.clear();
+    for(auto it = doc.object().begin(); it != doc.object().end(); ++it)
+        mUniqueNames.insert(it.key(), it.value().toString());
+    if(!mUniqueNames.isEmpty())
+        mCurrentMatrixKey = mUniqueNames.firstKey();
+}
+
+void MainWindow::loadMatrixProfilesFromFile() {
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/matrix-camera.json");
+    if(!file.open(QIODevice::ReadOnly))
+        return;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if(!doc.isObject())
+        return;
+    mMatrixProfiles.clear();
+    for(auto it = doc.object().begin(); it != doc.object().end(); ++it) {
+        MatrixProfile p;
+        QJsonObject obj = it.value().toObject();
+        auto arrayToString = [](const QJsonArray& arr){
+            QStringList list;
+            for(auto v : arr) list << QString::number(v.toDouble());
+            return list.join(",");
+        };
+        p.colorMatrix1 = arrayToString(obj.value("colorMatrix1").toArray());
+        p.colorMatrix2 = arrayToString(obj.value("colorMatrix2").toArray());
+        p.forwardMatrix1 = arrayToString(obj.value("forwardMatrix1").toArray());
+        p.forwardMatrix2 = arrayToString(obj.value("forwardMatrix2").toArray());
+        p.calibrationMatrix1 = arrayToString(obj.value("calibrationMatrix1").toArray());
+        p.calibrationMatrix2 = arrayToString(obj.value("calibrationMatrix2").toArray());
+        p.illuminant1 = obj.value("colorIlluminant1").toString();
+        p.illuminant2 = obj.value("colorIlluminant2").toString();
+        mMatrixProfiles.insert(it.key(), p);
+    }
+    if(!mMatrixProfiles.isEmpty())
+        mCurrentMatrixKey = mMatrixProfiles.firstKey();
+}
+
+void MainWindow::saveUniqueNamesToFile() {
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/unique-name.json");
+    if(!file.open(QIODevice::WriteOnly))
+        return;
+    QJsonObject obj;
+    for(auto it = mUniqueNames.begin(); it != mUniqueNames.end(); ++it)
+        obj.insert(it.key(), it.value());
+    QJsonDocument doc(obj);
+    file.write(doc.toJson());
+}
+
+void MainWindow::saveMatrixProfilesToFile() {
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/matrix-camera.json");
+    if(!file.open(QIODevice::WriteOnly))
+        return;
+    QJsonObject root;
+    auto stringToArray = [](const QString& text){
+        QJsonArray arr;
+        for(const auto& s : text.split(',', Qt::SkipEmptyParts))
+            arr.append(s.toDouble());
+        return arr;
+    };
+    for(auto it = mMatrixProfiles.begin(); it != mMatrixProfiles.end(); ++it) {
+        QJsonObject o;
+        o.insert("colorMatrix1", stringToArray(it.value().colorMatrix1));
+        o.insert("colorMatrix2", stringToArray(it.value().colorMatrix2));
+        o.insert("forwardMatrix1", stringToArray(it.value().forwardMatrix1));
+        o.insert("forwardMatrix2", stringToArray(it.value().forwardMatrix2));
+        o.insert("calibrationMatrix1", stringToArray(it.value().calibrationMatrix1));
+        o.insert("calibrationMatrix2", stringToArray(it.value().calibrationMatrix2));
+        o.insert("colorIlluminant1", it.value().illuminant1);
+        o.insert("colorIlluminant2", it.value().illuminant2);
+        root.insert(it.key(), o);
+    }
+    QJsonDocument doc(root);
+    file.write(doc.toJson());
+}
+
