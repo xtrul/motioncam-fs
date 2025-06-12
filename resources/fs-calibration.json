@@ -1,7 +1,0 @@
-{
-    "Default": {},
-    "Example": {
-        "colorMatrix1": [1,0,0,0,1,0,0,0,1],
-        "colorMatrix2": [1,0,0,0,1,0,0,0,1]
-    }
-}
