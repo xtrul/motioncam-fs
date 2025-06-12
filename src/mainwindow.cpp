@@ -402,7 +402,7 @@ void MainWindow::onShowHelp() {
 }
 
 void MainWindow::loadUniqueNamesFromFile() {
-    QFile file(QCoreApplication::applicationDirPath()+"/assets/unique-name.json");
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/camera-name.json");
     if(!file.open(QIODevice::ReadOnly))
         return;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
@@ -418,7 +418,7 @@ void MainWindow::loadUniqueNamesFromFile() {
 }
 
 void MainWindow::loadMatrixProfilesFromFile() {
-    QFile file(QCoreApplication::applicationDirPath()+"/assets/matrix-camera.json");
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/matrix-calibration.json");
     if(!file.open(QIODevice::ReadOnly))
         return;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
@@ -449,7 +449,7 @@ void MainWindow::loadMatrixProfilesFromFile() {
 }
 
 void MainWindow::saveUniqueNamesToFile() {
-    QFile file(QCoreApplication::applicationDirPath()+"/assets/unique-name.json");
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/camera-name.json");
     if(!file.open(QIODevice::WriteOnly))
         return;
     QJsonObject obj;
@@ -463,7 +463,7 @@ void MainWindow::saveUniqueNamesToFile() {
 }
 
 void MainWindow::saveMatrixProfilesToFile() {
-    QFile file(QCoreApplication::applicationDirPath()+"/assets/matrix-camera.json");
+    QFile file(QCoreApplication::applicationDirPath()+"/assets/matrix-calibration.json");
     if(!file.open(QIODevice::WriteOnly))
         return;
     QJsonObject root;
