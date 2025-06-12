@@ -66,6 +66,8 @@ private slots:
     void onRenderSettingsChanged(const Qt::CheckState &state);
     void onDraftModeQualityChanged(int index);
     void onSetCacheFolder(bool checked);
+    void onCameraProfileChanged(int index);
+    void onMatrixProfileChanged(int index);
 
     void playFile(const QString& path);
     void removeFile(QWidget* fileWidget);
@@ -74,6 +76,7 @@ private:
     void saveSettings();
     void restoreSettings();
     void updateUi();
+    void loadOverrideProfiles();
 
 private:
     Ui::MainWindow *ui;
@@ -81,6 +84,8 @@ private:
     QList<motioncam::MountedFile> mMountedFiles;
     QString mCacheRootFolder;
     int mDraftQuality;
+    QString mCameraProfileKey;
+    QString mMatrixProfileKey;
 };
 
 #endif // MAINWINDOW_H
