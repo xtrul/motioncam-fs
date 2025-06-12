@@ -22,6 +22,7 @@ set(PROJECT_SOURCES
         src/CameraMetadata.cpp
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
+        src/MetadataOverrides.cpp
         src/Utils.cpp
 
         include/mainwindow.h
@@ -33,6 +34,7 @@ set(PROJECT_SOURCES
         include/AudioWriter.h
         include/Measure.h
         include/SingleApplication.h
+        include/MetadataOverrides.h
         include/CameraMetadata.h
         include/CameraFrameMetadata.h
         include/Utils.h
