@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "SettingsDialog.h"
 
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -8,7 +9,9 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QMessageBox>
-#include <QFileDialog>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QCoreApplication>
 #include <QSettings>
 #include <algorithm>
 
@@ -63,7 +66,11 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->scaleRawCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
     connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
-    connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
+    connect(ui->actionOptions, &QAction::triggered, this, &MainWindow::onShowOptions);
+    connect(ui->actionUnmountAll, &QAction::triggered, this, &MainWindow::onUnmountAll);
+    connect(ui->actionExit, &QAction::triggered, this, &MainWindow::close);
+    connect(ui->actionDemo, &QAction::triggered, this, &MainWindow::onShowHelp);
+
 }
 
 MainWindow::~MainWindow() {
@@ -301,7 +308,6 @@ void MainWindow::updateUi() {
     else
         ui->scaleRawCheckBox->setEnabled(false);
 
-    ui->cacheFolderLabel->setText(mCacheRootFolder);
 }
 
 void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
@@ -327,16 +333,31 @@ void MainWindow::onDraftModeQualityChanged(int index) {
     onRenderSettingsChanged(Qt::CheckState::Checked);
 }
 
-void MainWindow::onSetCacheFolder(bool checked) {
-    Q_UNUSED(checked);  // Parameter not needed for folder selection
-
-    auto folderPath = QFileDialog::getExistingDirectory(
-        this,
-        tr("Select Cache Root Folder"),
-        QString(),  // Start from default location
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
-    );
-
-    mCacheRootFolder = folderPath;
-    ui->cacheFolderLabel->setText(mCacheRootFolder);
+void MainWindow::onShowOptions() {
+    SettingsDialog dlg(this);
+    dlg.setCachePath(mCacheRootFolder);
+    if(dlg.exec() == QDialog::Accepted) {
+        mCacheRootFolder = dlg.cachePath();
+        saveSettings();
+    }
 }
+
+void MainWindow::onUnmountAll() {
+    while(!mMountedFiles.isEmpty()) {
+        auto w = mMountedFiles.takeFirst();
+        mFuseFilesystem->unmount(w.mountId);
+    }
+    auto* scrollContent = ui->dragAndDropScrollArea->widget();
+    auto* layout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
+    QLayoutItem* child;
+    while((child = layout->takeAt(0)) != nullptr) {
+        if(auto widget = child->widget()) widget->deleteLater();
+        delete child;
+    }
+    ui->dragAndDropLabel->show();
+}
+
+void MainWindow::onShowHelp() {
+    QDesktopServices::openUrl(QUrl::fromLocalFile(QCoreApplication::applicationDirPath()+"/help/index.html"));
+}
+
