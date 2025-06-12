@@ -14,9 +14,18 @@ class FuseFileSystemImpl_Win : public IFuseFileSystem
 public:
     FuseFileSystemImpl_Win();
 
-    MountId mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) override;
+    MountId mount(FileRenderOptions options,
+                  int draftScale,
+                  const std::string& srcFile,
+                  const std::string& dstPath,
+                  const CalibrationProfile* calibration,
+                  const CameraSettings* cameraSettings) override;
     void unmount(MountId mountId) override;
-    void updateOptions(MountId mountId, FileRenderOptions options, int draftScale) override;
+    void updateOptions(MountId mountId,
+                       FileRenderOptions options,
+                       int draftScale,
+                       const CalibrationProfile* calibration,
+                       const CameraSettings* cameraSettings) override;
 
 private:
     MountId mNextMountId;
