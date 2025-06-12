@@ -173,7 +173,12 @@ void MainWindow::mountFile(const QString& filePath) {
 
     try {
         mountId = mFuseFilesystem->mount(
-            getRenderOptions(*ui), mDraftQuality, filePath.toStdString(), dstPath.toStdString());
+            getRenderOptions(*ui),
+            mDraftQuality,
+            filePath.toStdString(),
+            dstPath.toStdString(),
+            nullptr,
+            nullptr);
     }
     catch(std::runtime_error& e) {
         QMessageBox::critical(this, "Error", QString("There was an error mounting the file. (error: %1)").arg(e.what()));
@@ -302,7 +307,7 @@ void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
     updateUi();
 
     while(it != mMountedFiles.end()) {
-        mFuseFilesystem->updateOptions(it->mountId, renderOptions, mDraftQuality);
+        mFuseFilesystem->updateOptions(it->mountId, renderOptions, mDraftQuality, nullptr, nullptr);
         ++it;
     }
 }
