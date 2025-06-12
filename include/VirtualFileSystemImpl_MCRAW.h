@@ -1,6 +1,7 @@
 #pragma once
 
 #include <IVirtualFileSystem.h>
+#include "CalibrationProfile.h"
 
 namespace BS {
 class thread_pool;
@@ -20,7 +21,8 @@ public:
         LRUCache& lruCache,
         FileRenderOptions options,
         int draftScale,
-        const std::string& file);
+        const std::string& file,
+        const CalibrationProfile* calibration);
 
     ~VirtualFileSystemImpl_MCRAW();
 
@@ -35,7 +37,7 @@ public:
         std::function<void(size_t, int)> result,
         bool async=true) override;
 
-    void updateOptions(FileRenderOptions options, int draftScale) override;
+    void updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* calibration) override;
 
 private:
     void init(FileRenderOptions options);
@@ -68,6 +70,7 @@ private:
     int mDraftScale;
     FileRenderOptions mOptions;
     float mFps;
+    const CalibrationProfile* mCalibrationProfile;
     std::mutex mMutex;
 };
 
