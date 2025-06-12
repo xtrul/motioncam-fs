@@ -65,9 +65,7 @@ protected:
 private slots:
     void onRenderSettingsChanged(const Qt::CheckState &state);
     void onDraftModeQualityChanged(int index);
-    void onShowOptions();
-    void onUnmountAll();
-    void onShowHelp();
+    void onSetCacheFolder(bool checked);
 
     void playFile(const QString& path);
     void removeFile(QWidget* fileWidget);
