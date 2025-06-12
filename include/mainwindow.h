@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include "IFuseFileSystem.h"
+#include "CameraSettings.h"
+#include "CalibrationProfile.h"
 
 #include <QMainWindow>
 #include <QList>
@@ -66,6 +68,8 @@ private slots:
     void onRenderSettingsChanged(const Qt::CheckState &state);
     void onDraftModeQualityChanged(int index);
     void onSetCacheFolder(bool checked);
+    void onSetCameraSettingsFile(bool checked);
+    void onSetCalibrationProfileFile(bool checked);
 
     void playFile(const QString& path);
     void removeFile(QWidget* fileWidget);
@@ -80,6 +84,10 @@ private:
     std::unique_ptr<motioncam::IFuseFileSystem> mFuseFilesystem;
     QList<motioncam::MountedFile> mMountedFiles;
     QString mCacheRootFolder;
+    QString mCameraSettingsFile;
+    QString mCalibrationProfileFile;
+    motioncam::CameraSettingsMap mCameraSettings;
+    motioncam::CalibrationProfileMap mCalibrationProfiles;
     int mDraftQuality;
 };
 

@@ -22,6 +22,8 @@ set(PROJECT_SOURCES
         src/CameraMetadata.cpp
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
+        src/CalibrationProfile.cpp
+        src/CameraSettings.cpp
         src/Utils.cpp
 
         include/mainwindow.h
@@ -35,6 +37,8 @@ set(PROJECT_SOURCES
         include/SingleApplication.h
         include/CameraMetadata.h
         include/CameraFrameMetadata.h
+        include/CalibrationProfile.h
+        include/CameraSettings.h
         include/Utils.h
 
         ui/mainwindow.ui

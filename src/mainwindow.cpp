@@ -11,6 +11,8 @@
 #include <QFileDialog>
 #include <QSettings>
 #include <algorithm>
+#include "CameraSettings.h"
+#include "CalibrationProfile.h"
 
 #ifdef _WIN32
 #include "win/FuseFileSystemImpl_Win.h"
@@ -60,6 +62,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
     connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
+    connect(ui->changeCameraSettingsBtn, &QPushButton::clicked, this, &MainWindow::onSetCameraSettingsFile);
+    connect(ui->changeCalibrationProfileBtn, &QPushButton::clicked, this, &MainWindow::onSetCalibrationProfileFile);
 }
 
 MainWindow::~MainWindow() {
@@ -75,6 +79,8 @@ void MainWindow::saveSettings() {
     settings.setValue("applyVignetteCorrection", ui->vignetteCorrectionCheckBox->checkState() == Qt::CheckState::Checked);
     settings.setValue("scaleRaw", ui->scaleRawCheckBox->checkState() == Qt::CheckState::Checked);
     settings.setValue("cachePath", mCacheRootFolder);
+    settings.setValue("cameraSettingsFile", mCameraSettingsFile);
+    settings.setValue("calibrationProfileFile", mCalibrationProfileFile);
     settings.setValue("draftQuality", mDraftQuality);
 
     // Save mounted files
@@ -100,8 +106,28 @@ void MainWindow::restoreSettings() {
     ui->scaleRawCheckBox->setCheckState(
         settings.value("scaleRaw").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
 
-    mCacheRootFolder = settings.value("cachePath").toString();    
+    mCacheRootFolder = settings.value("cachePath").toString();
+    mCameraSettingsFile = settings.value("cameraSettingsFile").toString();
+    mCalibrationProfileFile = settings.value("calibrationProfileFile").toString();
     mDraftQuality = std::max(1, settings.value("draftQuality").toInt());
+
+    if(!mCameraSettingsFile.isEmpty()) {
+        try {
+            mCameraSettings = motioncam::loadCameraSettingsFromFile(mCameraSettingsFile.toStdString());
+        } catch(const std::exception& e) {
+            QMessageBox::warning(this, "Warning", QString("Failed to load camera settings: %1").arg(e.what()));
+            mCameraSettings.clear();
+        }
+    }
+
+    if(!mCalibrationProfileFile.isEmpty()) {
+        try {
+            mCalibrationProfiles = motioncam::loadCalibrationProfilesFromFile(mCalibrationProfileFile.toStdString());
+        } catch(const std::exception& e) {
+            QMessageBox::warning(this, "Warning", QString("Failed to load calibration profiles: %1").arg(e.what()));
+            mCalibrationProfiles.clear();
+        }
+    }
 
     if(mDraftQuality == 2)
         ui->draftQuality->setCurrentIndex(0);
@@ -293,6 +319,8 @@ void MainWindow::updateUi() {
         ui->scaleRawCheckBox->setEnabled(false);
 
     ui->cacheFolderLabel->setText(mCacheRootFolder);
+    ui->cameraSettingsLabel->setText(mCameraSettingsFile.isEmpty() ? "-" : mCameraSettingsFile);
+    ui->calibrationProfileLabel->setText(mCalibrationProfileFile.isEmpty() ? "-" : mCalibrationProfileFile);
 }
 
 void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
@@ -331,3 +359,34 @@ void MainWindow::onSetCacheFolder(bool checked) {
     mCacheRootFolder = folderPath;
     ui->cacheFolderLabel->setText(mCacheRootFolder);
 }
+
+void MainWindow::onSetCameraSettingsFile(bool checked) {
+    Q_UNUSED(checked);
+    QString filePath = QFileDialog::getOpenFileName(this, tr("Select Camera Settings"), QString(), tr("JSON Files (*.json)"));
+    if(!filePath.isEmpty()) {
+        mCameraSettingsFile = filePath;
+        try {
+            mCameraSettings = motioncam::loadCameraSettingsFromFile(filePath.toStdString());
+        } catch(const std::exception& e) {
+            QMessageBox::warning(this, "Warning", QString("Failed to load camera settings: %1").arg(e.what()));
+            mCameraSettings.clear();
+        }
+        ui->cameraSettingsLabel->setText(mCameraSettingsFile);
+    }
+}
+
+void MainWindow::onSetCalibrationProfileFile(bool checked) {
+    Q_UNUSED(checked);
+    QString filePath = QFileDialog::getOpenFileName(this, tr("Select Calibration Profiles"), QString(), tr("JSON Files (*.json)"));
+    if(!filePath.isEmpty()) {
+        mCalibrationProfileFile = filePath;
+        try {
+            mCalibrationProfiles = motioncam::loadCalibrationProfilesFromFile(filePath.toStdString());
+        } catch(const std::exception& e) {
+            QMessageBox::warning(this, "Warning", QString("Failed to load calibration profiles: %1").arg(e.what()));
+            mCalibrationProfiles.clear();
+        }
+        ui->calibrationProfileLabel->setText(mCalibrationProfileFile);
+    }
+}
+

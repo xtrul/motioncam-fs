@@ -1,0 +1,22 @@
+{
+  "Matrix Set 1": {
+    "colorMatrix1": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "colorMatrix2": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "forwardMatrix1": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "forwardMatrix2": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "calibrationMatrix1": [0.5234375, 0, 0, 0, 1, 0, 0, 0, 0.5625],
+    "calibrationMatrix2": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "colorIlluminant2": "standarda",
+    "colorIlluminant1": "d65"
+  },
+  "Matrix Set 2": {
+    "uniqueCameraModel": "Panasonic Generic",
+    "colorMatrix1": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "colorMatrix2": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "forwardMatrix1": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "forwardMatrix2": [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    "calibrationMatrix1": [0.5234375, 0, 0, 0, 1, 0, 0, 0, 0.5625],
+    "calibrationMatrix2": [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  }
+}
+
