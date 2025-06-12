@@ -184,13 +184,83 @@
            </item>
           </widget>
          </item>
-        </layout>
-       </item>
-      </layout>
-     </widget>
+       </layout>
+      </item>
+      <item row="2" column="0">
+       <layout class="QHBoxLayout" name="calibrationLayout">
+        <item>
+         <widget class="QLabel" name="calibrationLabel">
+          <property name="text">
+           <string>Calibration Profile:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="calibrationProfileCombo"/>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
     </item>
    </layout>
   </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>800</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionUnmountAll"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuOptions">
+    <property name="title">
+     <string>Options</string>
+    </property>
+    <addaction name="actionChangeCacheFolder"/>
+    <addaction name="actionScaleRaw"/>
+    <addaction name="menuCalibration"/>
+   </widget>
+   <widget class="QMenu" name="menuCalibration">
+    <property name="title">
+     <string>Calibration</string>
+    </property>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuOptions"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionUnmountAll">
+   <property name="text">
+    <string>Unmount All</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+  </action>
+  <action name="actionChangeCacheFolder">
+   <property name="text">
+    <string>Change Cache Folder</string>
+   </property>
+  </action>
+  <action name="actionScaleRaw">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Scale RAW</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>

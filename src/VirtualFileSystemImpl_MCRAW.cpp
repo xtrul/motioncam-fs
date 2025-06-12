@@ -4,6 +4,7 @@
 #include "Utils.h"
 #include "AudioWriter.h"
 #include "LRUCache.h"
+#include "CalibrationProfile.h"
 
 #include <motioncam/Decoder.hpp>
 
@@ -177,6 +178,24 @@ IconSize=16
 
         return 1;
     }
+
+    void applyCalibration(CameraConfiguration& config, const CalibrationProfile* profile) {
+        if(!profile)
+            return;
+
+        if(profile->colorMatrix1)
+            config.colorMatrix1 = *profile->colorMatrix1;
+        if(profile->colorMatrix2)
+            config.colorMatrix2 = *profile->colorMatrix2;
+        if(profile->forwardMatrix1)
+            config.forwardMatrix1 = *profile->forwardMatrix1;
+        if(profile->forwardMatrix2)
+            config.forwardMatrix2 = *profile->forwardMatrix2;
+        if(profile->blackLevel)
+            config.blackLevel = *profile->blackLevel;
+        if(profile->whiteLevel)
+            config.whiteLevel = *profile->whiteLevel;
+    }
 }
 
 VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
@@ -185,7 +204,8 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         LRUCache& lruCache,
         FileRenderOptions options,
         int draftScale,
-        const std::string& file) :
+        const std::string& file,
+        const CalibrationProfile* calibration) :
         mCache(lruCache),
         mIoThreadPool(ioThreadPool),
         mProcessingThreadPool(processingThreadPool),
@@ -194,7 +214,8 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         mTypicalDngSize(0),
         mFps(0),
         mDraftScale(draftScale),
-        mOptions(options) {
+        mOptions(options),
+        mCalibrationProfile(calibration) {
 
     init(options);
 }
@@ -225,6 +246,7 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
     decoder.loadFrame(frames[0], data, metadata);
 
     auto cameraConfig = CameraConfiguration::parse(decoder.getContainerMetadata());
+    applyCalibration(cameraConfig, mCalibrationProfile);
     auto cameraFrameMetadata = CameraFrameMetadata::parse(metadata);
 
     auto dngData = utils::generateDng(
@@ -380,13 +402,15 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
+    const auto calibration = mCalibrationProfile;
+    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, calibration, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
         try {
             auto decodedFrame = sharableFuture.get();
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
+            applyCalibration(containerMetadata, calibration);
 
             auto dngData = utils::generateDng(
                 *frameData,
@@ -478,9 +502,10 @@ int VirtualFileSystemImpl_MCRAW::readFile(
     return -1;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* calibration) {
     mDraftScale = draftScale;
     mOptions = options;
+    mCalibrationProfile = calibration;
 
     init(options);
 }

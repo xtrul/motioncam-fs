@@ -21,6 +21,7 @@ set(PROJECT_SOURCES
         src/VirtualFileSystemImpl_MCRAW.cpp
         src/CameraMetadata.cpp
         src/CameraFrameMetadata.cpp
+        src/CalibrationProfile.cpp
         src/AudioWriter.cpp
         src/Utils.cpp
 
@@ -35,6 +36,7 @@ set(PROJECT_SOURCES
         include/SingleApplication.h
         include/CameraMetadata.h
         include/CameraFrameMetadata.h
+        include/CalibrationProfile.h
         include/Utils.h
 
         ui/mainwindow.ui

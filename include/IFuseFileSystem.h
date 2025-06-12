@@ -3,6 +3,7 @@
 #include <string>
 
 #include "Types.h"
+#include "CalibrationProfile.h"
 
 namespace motioncam {
 
@@ -17,9 +18,9 @@ public:
     IFuseFileSystem(const IFuseFileSystem&) = delete;
     IFuseFileSystem& operator=(const IFuseFileSystem&) = delete;
 
-    virtual MountId mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) = 0;
+    virtual MountId mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath, const CalibrationProfile* calibration) = 0;
     virtual void unmount(MountId mountId) = 0;
-    virtual void updateOptions(MountId mountId, FileRenderOptions options, int draftScale) = 0;
+    virtual void updateOptions(MountId mountId, FileRenderOptions options, int draftScale, const CalibrationProfile* calibration) = 0;
 
 protected:
     IFuseFileSystem() = default;
