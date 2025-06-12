@@ -4,6 +4,9 @@
 #include <memory>
 
 #include "IFuseFileSystem.h"
+#include <QMap>
+#include <QString>
+#include "MatrixProfile.h"
 
 namespace BS {
     class thread_pool;
@@ -22,7 +25,14 @@ public:
 
     MountId mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) override;
     void unmount(MountId mountId) override;
-    void updateOptions(MountId mountId, FileRenderOptions options, int draftScale) override;
+    void updateOptions(
+        MountId mountId,
+        FileRenderOptions options,
+        int draftScale,
+        const QMap<QString, QString>& cameraNames,
+        const QString& cameraKey,
+        const QMap<QString, MatrixProfile>& matrixProfiles,
+        const QString& matrixKey) override;
 
 private:
     MountId mNextMountId;
