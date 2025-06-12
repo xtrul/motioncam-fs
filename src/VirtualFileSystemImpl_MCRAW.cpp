@@ -185,8 +185,7 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         LRUCache& lruCache,
         FileRenderOptions options,
         int draftScale,
-        const std::string& file,
-        const CalibrationProfile* profile) :
+        const std::string& file) :
         mCache(lruCache),
         mIoThreadPool(ioThreadPool),
         mProcessingThreadPool(processingThreadPool),
@@ -195,8 +194,7 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         mTypicalDngSize(0),
         mFps(0),
         mDraftScale(draftScale),
-        mOptions(options),
-        mCalibrationProfile(profile) {
+        mOptions(options) {
 
     init(options);
 }
@@ -382,29 +380,13 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    const auto profile = mCalibrationProfile;
-    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result, profile]() {
+    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
         try {
             auto decodedFrame = sharableFuture.get();
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
-
-            if(profile) {
-                if(profile->colorMatrix1)
-                    containerMetadata.colorMatrix1 = *profile->colorMatrix1;
-                if(profile->colorMatrix2)
-                    containerMetadata.colorMatrix2 = *profile->colorMatrix2;
-                if(profile->forwardMatrix1)
-                    containerMetadata.forwardMatrix1 = *profile->forwardMatrix1;
-                if(profile->forwardMatrix2)
-                    containerMetadata.forwardMatrix2 = *profile->forwardMatrix2;
-                if(profile->blackLevel)
-                    containerMetadata.blackLevel = *profile->blackLevel;
-                if(profile->whiteLevel)
-                    containerMetadata.whiteLevel = *profile->whiteLevel;
-            }
 
             auto dngData = utils::generateDng(
                 *frameData,
@@ -496,10 +478,9 @@ int VirtualFileSystemImpl_MCRAW::readFile(
     return -1;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
     mDraftScale = draftScale;
     mOptions = options;
-    mCalibrationProfile = profile;
 
     init(options);
 }

@@ -4,6 +4,5 @@
         <file>assets/app_icon.png</file>
         <file>assets/play_btn.png</file>
         <file>assets/remove_btn.png</file>
-        <file>resources/fs-calibration.json</file>
     </qresource>
 </RCC>

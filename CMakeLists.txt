@@ -22,7 +22,6 @@ set(PROJECT_SOURCES
         src/CameraMetadata.cpp
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
-        src/CalibrationProfile.cpp
         src/Utils.cpp
 
         include/mainwindow.h
@@ -32,7 +31,6 @@ set(PROJECT_SOURCES
         include/VirtualFileSystemImpl_MCRAW.h
         include/LRUCache.h
         include/AudioWriter.h
-        include/CalibrationProfile.h
         include/Measure.h
         include/SingleApplication.h
         include/CameraMetadata.h
