@@ -121,6 +121,13 @@ target_include_directories(motioncam-decoder
 find_package(spdlog CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 
+# Ensure BS::thread_pool header is available
+find_path(BS_THREAD_POOL_INCLUDE_DIR BS_thread_pool.hpp)
+if(NOT BS_THREAD_POOL_INCLUDE_DIR)
+    message(FATAL_ERROR "BS_thread_pool.hpp not found. Please install bshoshany-thread-pool via vcpkg")
+endif()
+target_include_directories(motioncam-fs PRIVATE ${BS_THREAD_POOL_INCLUDE_DIR})
+
 # Add boost
 # Modern CMake with vcpkg usually doesn't require these Boost_USE_* variables
 # set(Boost_USE_STATIC_LIBS        ON)
