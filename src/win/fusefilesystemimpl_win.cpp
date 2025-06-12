@@ -77,12 +77,17 @@ public:
         FileRenderOptions options,
         int draftScale,
         const std::string& srcFile,
-        const std::string& dstPath);
+        const std::string& dstPath,
+        const CalibrationProfile* calibration,
+        const CameraSettings* cameraSettings);
 
     ~Session();
 
 public:
-    void updateOptions(FileRenderOptions options, int draftScale);
+    void updateOptions(FileRenderOptions options,
+                       int draftScale,
+                       const CalibrationProfile* calibration,
+                       const CameraSettings* cameraSettings);
 
 protected:
     HRESULT StartDirEnum(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ const GUID* EnumerationId) override;
@@ -118,10 +123,12 @@ Session::Session(
     FileRenderOptions options,
     int draftScale,
     const std::string& srcFile,
-    const std::string& dstPath) :
+    const std::string& dstPath,
+    const CalibrationProfile* calibration,
+    const CameraSettings* cameraSettings) :
     mOptions(options),
     mDraftScale(draftScale),
-    mFs(std::make_unique<VirtualFileSystemImpl_MCRAW>(options, draftScale, srcFile))
+    mFs(std::make_unique<VirtualFileSystemImpl_MCRAW>(options, draftScale, srcFile, calibration, cameraSettings))
 {
     SetOptionalMethods(OptionalMethods::Notify);
 
@@ -162,12 +169,15 @@ Session::~Session() {
     Stop();
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale) {
+void Session::updateOptions(FileRenderOptions options,
+                           int draftScale,
+                           const CalibrationProfile* calibration,
+                           const CameraSettings* cameraSettings) {
     mOptions = options;
     mDraftScale = draftScale;
 
     // Tell file system about new options
-    mFs->updateOptions(options, draftScale);
+    mFs->updateOptions(options, draftScale, calibration, cameraSettings);
 
     // We need to clear out the cache
     auto files = mFs->listFiles();
@@ -512,7 +522,12 @@ FuseFileSystemImpl_Win::FuseFileSystemImpl_Win() :
     setupLogging();
 }
 
-MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) {
+MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options,
+                                      int draftScale,
+                                      const std::string& srcFile,
+                                      const std::string& dstPath,
+                                      const CalibrationProfile* calibration,
+                                      const CameraSettings* cameraSettings) {
     fs::path srcPath(srcFile);
     std::string extension = srcPath.extension().string();
 
@@ -522,7 +537,7 @@ MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, int draftScale,
         auto mountId = mNextMountId++;
 
         try {
-            mMountedFiles[mountId] = std::make_unique<Session>(options, draftScale, srcFile, dstPath);
+            mMountedFiles[mountId] = std::make_unique<Session>(options, draftScale, srcFile, dstPath, calibration, cameraSettings);
         }
         catch(std::runtime_error& e) {
             spdlog::error("Failed to mount {} to {} (error: {})", srcFile, dstPath, e.what());
@@ -542,13 +557,17 @@ void FuseFileSystemImpl_Win::unmount(MountId mountId) {
     mMountedFiles.erase(mountId);
 }
 
-void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
+void FuseFileSystemImpl_Win::updateOptions(MountId mountId,
+                                           FileRenderOptions options,
+                                           int draftScale,
+                                           const CalibrationProfile* calibration,
+                                           const CameraSettings* cameraSettings) {
     auto it = mMountedFiles.find(mountId);
     if(it == mMountedFiles.end())
         return;
 
     dynamic_cast<Session*>(mMountedFiles[mountId].get())->updateOptions(
-        options, draftScale);
+        options, draftScale, calibration, cameraSettings);
 }
 
 } // namespace motioncam

@@ -11,16 +11,26 @@ namespace motioncam {
 class Decoder;
 class LRUCache;
 
+class CalibrationProfile;
+class CameraSettings;
+
 class VirtualFileSystemImpl_MCRAW : public IVirtualFileSystem
 {
 public:
-    VirtualFileSystemImpl_MCRAW(FileRenderOptions options, int draftScale, const std::string& file);
+    VirtualFileSystemImpl_MCRAW(FileRenderOptions options,
+                                int draftScale,
+                                const std::string& file,
+                                const CalibrationProfile* calibration = nullptr,
+                                const CameraSettings* cameraSettings = nullptr);
 
     std::vector<Entry> listFiles(const std::string& filter = "") const override;
     std::optional<Entry> findEntry(const std::string& fullPath) const override;
     size_t readFile(
         const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const override;
-    void updateOptions(FileRenderOptions options, int draftScale) override;
+    void updateOptions(FileRenderOptions options,
+                       int draftScale,
+                       const CalibrationProfile* calibration,
+                       const CameraSettings* cameraSettings) override;
 
 private:
     void init(FileRenderOptions options);
@@ -34,6 +44,8 @@ private:
 private:
     std::unique_ptr<BS::thread_pool> mIoThreadPool;
     std::unique_ptr<BS::thread_pool> mProcessingThreadPool;
+    const CalibrationProfile* mCalibration;
+    const CameraSettings* mCameraSettings;
     const std::string mSrcPath;
     const std::string mBaseName;
     size_t mTypicalDngSize;

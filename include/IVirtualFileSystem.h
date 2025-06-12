@@ -9,6 +9,9 @@
 
 namespace motioncam {
 
+class CalibrationProfile;
+class CameraSettings;
+
 class IVirtualFileSystem {
 public:
     virtual ~IVirtualFileSystem() = default;
@@ -20,7 +23,10 @@ public:
     virtual std::optional<Entry> findEntry(const std::string& fullPath) const = 0;
     virtual size_t readFile(
         const Entry& entry, FileRenderOptions options, const size_t pos, const size_t len, void* dst, std::function<void(size_t, int)> result) const = 0;
-    virtual void updateOptions(FileRenderOptions options, int draftScale) = 0;
+    virtual void updateOptions(FileRenderOptions options,
+                               int draftScale,
+                               const CalibrationProfile* calibration,
+                               const CameraSettings* cameraSettings) = 0;
 
 protected:
     IVirtualFileSystem() = default;
