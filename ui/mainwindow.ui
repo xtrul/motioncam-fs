@@ -184,42 +184,8 @@
            </item>
           </widget>
          </item>
-       </layout>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="cameraProfileLabel">
-        <property name="text">
-         <string>Camera Profile:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QComboBox" name="cameraProfileBox">
-        <property name="minimumSize">
-         <size>
-          <width>150</width>
-          <height>30</height>
-         </size>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="matrixProfileLabel">
-        <property name="text">
-         <string>Matrix Profile:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="1">
-       <widget class="QComboBox" name="matrixProfileBox">
-        <property name="minimumSize">
-         <size>
-          <width>150</width>
-          <height>30</height>
-         </size>
-        </property>
-       </widget>
-      </item>
+        </layout>
+       </item>
       </layout>
      </widget>
     </item>

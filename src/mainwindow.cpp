@@ -10,8 +10,6 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QSettings>
-#include <QStandardPaths>
-#include "MetadataOverrides.h"
 #include <algorithm>
 
 #ifdef _WIN32
@@ -44,8 +42,6 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , mDraftQuality(1)
-    , mCameraProfileKey("(No Override)")
-    , mMatrixProfileKey("(No Override)")
 {
     ui->setupUi(this);
 
@@ -67,12 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->scaleRawCheckBox, &QCheckBox::checkStateChanged, this, &MainWindow::onRenderSettingsChanged);
     connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
-    connect(ui->cameraProfileBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onCameraProfileChanged);
-    connect(ui->matrixProfileBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onMatrixProfileChanged);
-
     connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
-
-    loadOverrideProfiles();
 }
 
 MainWindow::~MainWindow() {
@@ -89,8 +80,6 @@ void MainWindow::saveSettings() {
     settings.setValue("scaleRaw", ui->scaleRawCheckBox->checkState() == Qt::CheckState::Checked);
     settings.setValue("cachePath", mCacheRootFolder);
     settings.setValue("draftQuality", mDraftQuality);
-    settings.setValue("cameraProfile", mCameraProfileKey);
-    settings.setValue("matrixProfile", mMatrixProfileKey);
 
     // Save mounted files
     settings.beginWriteArray("mountedFiles");
@@ -115,10 +104,8 @@ void MainWindow::restoreSettings() {
     ui->scaleRawCheckBox->setCheckState(
         settings.value("scaleRaw").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
 
-    mCacheRootFolder = settings.value("cachePath").toString();
+    mCacheRootFolder = settings.value("cachePath").toString();    
     mDraftQuality = std::max(1, settings.value("draftQuality").toInt());
-    mCameraProfileKey = settings.value("cameraProfile", "(No Override)").toString();
-    mMatrixProfileKey = settings.value("matrixProfile", "(No Override)").toString();
 
     if(mDraftQuality == 2)
         ui->draftQuality->setCurrentIndex(0);
@@ -352,43 +339,4 @@ void MainWindow::onSetCacheFolder(bool checked) {
 
     mCacheRootFolder = folderPath;
     ui->cacheFolderLabel->setText(mCacheRootFolder);
-}
-
-void MainWindow::loadOverrideProfiles() {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/MotionCam";
-    motioncam::loadOverrideProfiles(dir.toStdString());
-
-    ui->cameraProfileBox->clear();
-    ui->matrixProfileBox->clear();
-
-    ui->cameraProfileBox->addItem("(No Override)");
-    for(const auto& p : motioncam::getCameraProfiles())
-        ui->cameraProfileBox->addItem(QString::fromStdString(p.first));
-
-    ui->matrixProfileBox->addItem("(No Override)");
-    for(const auto& m : motioncam::getMatrixProfiles())
-        ui->matrixProfileBox->addItem(QString::fromStdString(m.first));
-
-    int idx = ui->cameraProfileBox->findText(mCameraProfileKey);
-    if(idx >= 0) ui->cameraProfileBox->setCurrentIndex(idx);
-    else ui->cameraProfileBox->setCurrentIndex(0);
-
-    idx = ui->matrixProfileBox->findText(mMatrixProfileKey);
-    if(idx >= 0) ui->matrixProfileBox->setCurrentIndex(idx);
-    else ui->matrixProfileBox->setCurrentIndex(0);
-
-    motioncam::setSelectedCameraProfile(ui->cameraProfileBox->currentText().toStdString());
-    motioncam::setSelectedMatrixProfile(ui->matrixProfileBox->currentText().toStdString());
-}
-
-void MainWindow::onCameraProfileChanged(int index) {
-    Q_UNUSED(index);
-    mCameraProfileKey = ui->cameraProfileBox->currentText();
-    motioncam::setSelectedCameraProfile(mCameraProfileKey.toStdString());
-}
-
-void MainWindow::onMatrixProfileChanged(int index) {
-    Q_UNUSED(index);
-    mMatrixProfileKey = ui->matrixProfileBox->currentText();
-    motioncam::setSelectedMatrixProfile(mMatrixProfileKey.toStdString());
 }

@@ -4,7 +4,6 @@
 #include "Utils.h"
 #include "AudioWriter.h"
 #include "LRUCache.h"
-#include "MetadataOverrides.h"
 
 #include <motioncam/Decoder.hpp>
 
@@ -388,50 +387,6 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
         try {
             auto decodedFrame = sharableFuture.get();
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
-
-            const auto camKey = getSelectedCameraProfile();
-            if(camKey != "(No Override)") {
-                const auto& profiles = getCameraProfiles();
-                auto it = profiles.find(camKey);
-                if(it != profiles.end()) {
-                    containerMetadata.extraData.postProcessSettings.metadata.buildModel = it->second.uniqueCameraModel;
-                }
-            }
-
-            const auto matrixKey = getSelectedMatrixProfile();
-            if(matrixKey != "(No Override)") {
-                const auto& matrices = getMatrixProfiles();
-                auto it = matrices.find(matrixKey);
-                if(it != matrices.end()) {
-                    const auto& j = it->second.data;
-                    if(j.contains("colorMatrix1") && j["colorMatrix1"].is_array())
-                        containerMetadata.colorMatrix1 = jsonArrayToStdArray<float,9>(j["colorMatrix1"]);
-                    if(j.contains("colorMatrix2") && j["colorMatrix2"].is_array())
-                        containerMetadata.colorMatrix2 = jsonArrayToStdArray<float,9>(j["colorMatrix2"]);
-                    if(j.contains("forwardMatrix1") && j["forwardMatrix1"].is_array())
-                        containerMetadata.forwardMatrix1 = jsonArrayToStdArray<float,9>(j["forwardMatrix1"]);
-                    if(j.contains("forwardMatrix2") && j["forwardMatrix2"].is_array())
-                        containerMetadata.forwardMatrix2 = jsonArrayToStdArray<float,9>(j["forwardMatrix2"]);
-                    if(j.contains("calibrationMatrix1") && j["calibrationMatrix1"].is_array())
-                        containerMetadata.calibrationMatrix1 = jsonArrayToStdArray<float,9>(j["calibrationMatrix1"]);
-                    if(j.contains("calibrationMatrix2") && j["calibrationMatrix2"].is_array())
-                        containerMetadata.calibrationMatrix2 = jsonArrayToStdArray<float,9>(j["calibrationMatrix2"]);
-                    if(j.contains("colorIlluminant1") && j["colorIlluminant1"].is_string())
-                        containerMetadata.colorIlluminant1 = j["colorIlluminant1"].get<std::string>();
-                    if(j.contains("colorIlluminant2") && j["colorIlluminant2"].is_string())
-                        containerMetadata.colorIlluminant2 = j["colorIlluminant2"].get<std::string>();
-
-                    if(j.contains("whiteLevel") && j["whiteLevel"].is_number())
-                        containerMetadata.whiteLevel = j["whiteLevel"].get<float>();
-                    if(j.contains("blackLevel") && j["blackLevel"].is_array())
-                        containerMetadata.blackLevel = jsonArrayToStdArray<unsigned short,4>(j["blackLevel"]);
-
-                    if(j.contains("iso") && j["iso"].is_number_integer())
-                        frameMetadata.iso = j["iso"].get<int>();
-                    if(j.contains("exposureTime") && j["exposureTime"].is_number())
-                        frameMetadata.exposureTime = j["exposureTime"].get<double>();
-                }
-            }
 
             auto dngData = utils::generateDng(
                 *frameData,
