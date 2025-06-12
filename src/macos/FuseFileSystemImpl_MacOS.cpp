@@ -1,6 +1,10 @@
 #include "macos/FuseFileSystemImpl_MacOS.h"
 #include "VirtualFileSystemImpl_MCRAW.h"
 #include "LRUCache.h"
+#include "MatrixProfile.h"
+
+#include <QMap>
+#include <QString>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem.hpp>
@@ -73,7 +77,13 @@ public:
     Session(const std::string& srcFile, const std::string& dstPath, VirtualFileSystemImpl_MCRAW* fs);
     ~Session();
 
-    void updateOptions(FileRenderOptions options, int draftScale);
+    void updateOptions(
+        FileRenderOptions options,
+        int draftScale,
+        const QMap<QString, QString>& cameraNames,
+        const QString& cameraKey,
+        const QMap<QString, MatrixProfile>& matrixProfiles,
+        const QString& matrixKey);
 
 private:
     void init(VirtualFileSystemImpl_MCRAW* fs);
@@ -171,8 +181,14 @@ void Session::init(VirtualFileSystemImpl_MCRAW* fs) {
 
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale) {
-    mFs->updateOptions(options, draftScale);
+void Session::updateOptions(
+    FileRenderOptions options,
+    int draftScale,
+    const QMap<QString, QString>& cameraNames,
+    const QString& cameraKey,
+    const QMap<QString, MatrixProfile>& matrixProfiles,
+    const QString& matrixKey) {
+    mFs->updateOptions(options, draftScale, cameraNames, cameraKey, matrixProfiles, matrixKey);
 
     fuse_invalidate_path(mFuse, mDstPath.c_str());
 
@@ -408,10 +424,17 @@ void FuseFileSystemImpl_MacOs::unmount(MountId mountId) {
     }
 }
 
-void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
+void FuseFileSystemImpl_MacOs::updateOptions(
+    MountId mountId,
+    FileRenderOptions options,
+    int draftScale,
+    const QMap<QString, QString>& cameraNames,
+    const QString& cameraKey,
+    const QMap<QString, MatrixProfile>& matrixProfiles,
+    const QString& matrixKey) {
     auto it = mMountedFiles.find(mountId);
     if(it != mMountedFiles.end()) {
-        it->second->updateOptions(options, draftScale);
+        it->second->updateOptions(options, draftScale, cameraNames, cameraKey, matrixProfiles, matrixKey);
     }
 }
 
