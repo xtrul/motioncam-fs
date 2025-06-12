@@ -4,6 +4,10 @@
 
 #include "VirtualFileSystemImpl_MCRAW.h"
 #include "LRUCache.h"
+#include "MatrixProfile.h"
+
+#include <QMap>
+#include <QString>
 
 #include <iostream>
 #include <ntstatus.h>
@@ -81,7 +85,13 @@ public:
     ~Session();
 
 public:
-    void updateOptions(FileRenderOptions options, int draftScale);
+    void updateOptions(
+        FileRenderOptions options,
+        int draftScale,
+        const QMap<QString, QString>& cameraNames,
+        const QString& cameraKey,
+        const QMap<QString, MatrixProfile>& matrixProfiles,
+        const QString& matrixKey);
 
 protected:
     HRESULT StartDirEnum(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ const GUID* EnumerationId) override;
@@ -156,12 +166,18 @@ Session::~Session() {
     Stop();
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale) {
+void Session::updateOptions(
+    FileRenderOptions options,
+    int draftScale,
+    const QMap<QString, QString>& cameraNames,
+    const QString& cameraKey,
+    const QMap<QString, MatrixProfile>& matrixProfiles,
+    const QString& matrixKey) {
     mOptions = options;
     mDraftScale = draftScale;
 
     // Tell file system about new options
-    mFs->updateOptions(options, draftScale);
+    mFs->updateOptions(options, draftScale, cameraNames, cameraKey, matrixProfiles, matrixKey);
 
     // We need to clear out the cache
     auto files = mFs->listFiles();
@@ -536,13 +552,20 @@ void FuseFileSystemImpl_Win::unmount(MountId mountId) {
     mMountedFiles.erase(mountId);
 }
 
-void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
+void FuseFileSystemImpl_Win::updateOptions(
+    MountId mountId,
+    FileRenderOptions options,
+    int draftScale,
+    const QMap<QString, QString>& cameraNames,
+    const QString& cameraKey,
+    const QMap<QString, MatrixProfile>& matrixProfiles,
+    const QString& matrixKey) {
     auto it = mMountedFiles.find(mountId);
     if(it == mMountedFiles.end())
         return;
 
     dynamic_cast<Session*>(mMountedFiles[mountId].get())->updateOptions(
-        options, draftScale);
+        options, draftScale, cameraNames, cameraKey, matrixProfiles, matrixKey);
 }
 
 } // namespace motioncam
