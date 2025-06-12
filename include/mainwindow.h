@@ -6,7 +6,6 @@
 #include <QMainWindow>
 #include <QList>
 #include <QString>
-#include "SettingsDialog.h"
 
 namespace motioncam {
     struct MountedFile {
@@ -66,9 +65,7 @@ protected:
 private slots:
     void onRenderSettingsChanged(const Qt::CheckState &state);
     void onDraftModeQualityChanged(int index);
-    void onShowOptions();
-    void onUnmountAll();
-    void onShowHelp();
+    void onSetCacheFolder(bool checked);
 
     void playFile(const QString& path);
     void removeFile(QWidget* fileWidget);
@@ -77,19 +74,12 @@ private:
     void saveSettings();
     void restoreSettings();
     void updateUi();
-    void loadUniqueNamesFromFile();
-    void loadMatrixProfilesFromFile();
-    void saveUniqueNamesToFile();
-    void saveMatrixProfilesToFile();
 
 private:
     Ui::MainWindow *ui;
     std::unique_ptr<motioncam::IFuseFileSystem> mFuseFilesystem;
     QList<motioncam::MountedFile> mMountedFiles;
     QString mCacheRootFolder;
-    QMap<QString, QString> mUniqueNames;
-    QMap<QString, MatrixProfile> mMatrixProfiles;
-    QString mCurrentMatrixKey;
     int mDraftQuality;
 };
 
