@@ -19,6 +19,9 @@ set(PROJECT_SOURCES
         src/main.cpp
         src/mainwindow.cpp
         src/VirtualFileSystemImpl_MCRAW.cpp
+        src/CalibrationProfile.cpp
+        src/CameraSettings.cpp
+        src/optionsdialog.cpp
         src/CameraMetadata.cpp
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
@@ -29,6 +32,9 @@ set(PROJECT_SOURCES
         include/IVirtualFileSystem.h
         include/IFuseFileSystem.h
         include/VirtualFileSystemImpl_MCRAW.h
+        include/CalibrationProfile.h
+        include/CameraSettings.h
+        include/optionsdialog.h
         include/LRUCache.h
         include/AudioWriter.h
         include/Measure.h
@@ -38,6 +44,7 @@ set(PROJECT_SOURCES
         include/Utils.h
 
         ui/mainwindow.ui
+        ui/optionsdialog.ui
 )
 
 qt_add_resources(PROJECT_SOURCES resources.qrc)
@@ -110,7 +117,7 @@ set(Boost_USE_RELEASE_LIBS       ON)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 
-find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem algorithm locale)
+find_package(Boost 1.83.0 REQUIRED COMPONENTS filesystem)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
 endif()

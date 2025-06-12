@@ -177,9 +177,15 @@ IconSize=16
 }
 
 VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
-    FileRenderOptions options, int draftScale, const std::string& file) :
+    FileRenderOptions options,
+    int draftScale,
+    const std::string& file,
+    const CalibrationProfile* calibration,
+    const CameraSettings* cameraSettings) :
         mIoThreadPool(std::make_unique<BS::thread_pool>(IO_THREADS)),
         mProcessingThreadPool(std::make_unique<BS::thread_pool>()),
+        mCalibration(calibration),
+        mCameraSettings(cameraSettings),
         mSrcPath(file),
         mBaseName(extractFilenameWithoutExtension(file)),
         mTypicalDngSize(0),
@@ -346,13 +352,27 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    auto generateTask = [sharableFuture, fps, draftScale, options, pos, len, dst, result]() {
+    auto generateTask = [this, sharableFuture, fps, draftScale, options, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
         try {
             auto decodedFrame = sharableFuture.get();
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
+
+            if(mCalibration) {
+                if(mCalibration->colorMatrix1) containerMetadata.colorMatrix1 = *mCalibration->colorMatrix1;
+                if(mCalibration->colorMatrix2) containerMetadata.colorMatrix2 = *mCalibration->colorMatrix2;
+                if(mCalibration->forwardMatrix1) containerMetadata.forwardMatrix1 = *mCalibration->forwardMatrix1;
+                if(mCalibration->forwardMatrix2) containerMetadata.forwardMatrix2 = *mCalibration->forwardMatrix2;
+                if(mCalibration->calibrationMatrix1) containerMetadata.calibrationMatrix1 = *mCalibration->calibrationMatrix1;
+                if(mCalibration->calibrationMatrix2) containerMetadata.calibrationMatrix2 = *mCalibration->calibrationMatrix2;
+                if(mCalibration->colorIlluminant1) containerMetadata.colorIlluminant1 = *mCalibration->colorIlluminant1;
+                if(mCalibration->colorIlluminant2) containerMetadata.colorIlluminant2 = *mCalibration->colorIlluminant2;
+            }
+            if(mCameraSettings && mCameraSettings->uniqueCameraModel) {
+                containerMetadata.extraData.postProcessSettings.metadata.buildModel = *mCameraSettings->uniqueCameraModel;
+            }
 
             auto dngData = utils::generateDng(
                 *frameData,
@@ -427,8 +447,14 @@ size_t VirtualFileSystemImpl_MCRAW::readFile(
     return 0;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(
+    FileRenderOptions options,
+    int draftScale,
+    const CalibrationProfile* calibration,
+    const CameraSettings* cameraSettings) {
     mDraftScale = draftScale;
+    mCalibration = calibration;
+    mCameraSettings = cameraSettings;
 
     init(options);
 }
