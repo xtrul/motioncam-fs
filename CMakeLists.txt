@@ -61,9 +61,27 @@ if(WIN32)
         include/win/fusefilesystemimpl_win.h
         include/win/virtualizationInstance.h)
 
-    find_library(projected-fs ProjectedFSLib)
+    # Explicitly search for ProjectedFSLib.lib in the known SDK path
+    find_library(PROJECTED_FS_LIB # Changed variable name for clarity from 'projected-fs' to 'PROJECTED_FS_LIB'
+                 NAMES ProjectedFSLib
+                 PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64"
+                       # You can add other potential SDK paths here as fallbacks if needed:
+                       # "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.22621.0/um/x64"
+                       # "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.19041.0/um/x64"
+                 # DOC "Path to ProjectedFSLib.lib" # Optional documentation string
+                )
 
-    set(platform-specific ${projected-fs})
+    if(NOT PROJECTED_FS_LIB)
+        message(FATAL_ERROR "ProjectedFSLib.lib not found even with explicit path. \n"
+                            "The file was expected in a subdirectory of 'C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64'. \n"
+                            "Please verify: \n"
+                            "1. The 'Projected File System' component is installed via Visual Studio Installer (Individual Components).\n"
+                            "2. The path provided in CMakeLists.txt for find_library (PROJECTED_FS_LIB) is correct for your system.\n"
+                            "Current value of PROJECTED_FS_LIB was: ${PROJECTED_FS_LIB}")
+    else()
+        message(STATUS "Found ProjectedFSLib: ${PROJECTED_FS_LIB}")
+        set(platform-specific ${PROJECTED_FS_LIB})
+    endif()
 endif()
 
 set(CMAKE_AUTOUIC_SEARCH_PATHS ui)
