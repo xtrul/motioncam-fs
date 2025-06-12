@@ -1,9 +1,6 @@
 #pragma once
 
 #include <IVirtualFileSystem.h>
-#include <QMap>
-#include <QString>
-#include "MatrixProfile.h"
 
 namespace BS {
 class thread_pool;
@@ -38,13 +35,7 @@ public:
         std::function<void(size_t, int)> result,
         bool async=true) override;
 
-    void updateOptions(
-        FileRenderOptions options,
-        int draftScale,
-        const QMap<QString, QString>& cameraNames,
-        const QString& cameraKey,
-        const QMap<QString, MatrixProfile>& matrixProfiles,
-        const QString& matrixKey) override;
+    void updateOptions(FileRenderOptions options, int draftScale) override;
 
 private:
     void init(FileRenderOptions options);
@@ -77,10 +68,6 @@ private:
     int mDraftScale;
     FileRenderOptions mOptions;
     float mFps;
-    QMap<QString, QString> mCameraNames;
-    QString mCurrentCameraKey;
-    QMap<QString, MatrixProfile> mMatrixProfiles;
-    QString mCurrentMatrixKey;
     std::mutex mMutex;
 };
 

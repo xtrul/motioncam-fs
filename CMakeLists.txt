@@ -23,7 +23,6 @@ set(PROJECT_SOURCES
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
         src/Utils.cpp
-        src/SettingsDialog.cpp
 
         include/mainwindow.h
         include/Types.h
@@ -37,11 +36,8 @@ set(PROJECT_SOURCES
         include/CameraMetadata.h
         include/CameraFrameMetadata.h
         include/Utils.h
-        include/SettingsDialog.h
-        include/MatrixProfile.h
 
         ui/mainwindow.ui
-        ui/SettingsDialog.ui
 )
 
 qt_add_resources(PROJECT_SOURCES resources.qrc)

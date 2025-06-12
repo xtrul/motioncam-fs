@@ -4,10 +4,6 @@
 #include "Utils.h"
 #include "AudioWriter.h"
 #include "LRUCache.h"
-#include "MatrixProfile.h"
-
-#include <QMap>
-#include <QString>
 
 #include <motioncam/Decoder.hpp>
 
@@ -198,9 +194,7 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         mTypicalDngSize(0),
         mFps(0),
         mDraftScale(draftScale),
-        mOptions(options),
-        mCurrentCameraKey(),
-        mCurrentMatrixKey() {
+        mOptions(options) {
 
     init(options);
 }
@@ -232,35 +226,6 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
 
     auto cameraConfig = CameraConfiguration::parse(decoder.getContainerMetadata());
     auto cameraFrameMetadata = CameraFrameMetadata::parse(metadata);
-
-    auto applyOverrides = [this](CameraConfiguration& cfg){
-        if(mMatrixProfiles.contains(mCurrentMatrixKey)) {
-            const auto& p = mMatrixProfiles[mCurrentMatrixKey];
-            auto toArray = [](const QString& text){
-                std::array<float,9> arr{0};
-                auto parts = text.split(',', Qt::SkipEmptyParts);
-                for(int i=0;i<parts.size() && i<9;++i)
-                    arr[i] = parts[i].toFloat();
-                return arr;
-            };
-            cfg.colorMatrix1 = toArray(p.colorMatrix1);
-            cfg.colorMatrix2 = toArray(p.colorMatrix2);
-            cfg.forwardMatrix1 = toArray(p.forwardMatrix1);
-            cfg.forwardMatrix2 = toArray(p.forwardMatrix2);
-            cfg.calibrationMatrix1 = toArray(p.calibrationMatrix1);
-            cfg.calibrationMatrix2 = toArray(p.calibrationMatrix2);
-            if(!p.illuminant1.isEmpty())
-                cfg.colorIlluminant1 = p.illuminant1.toStdString();
-            if(!p.illuminant2.isEmpty())
-                cfg.colorIlluminant2 = p.illuminant2.toStdString();
-            if(!p.uniqueCameraModel.isEmpty())
-                cfg.extraData.postProcessSettings.metadata.buildModel = p.uniqueCameraModel.toStdString();
-        }
-        if(mCameraNames.contains(mCurrentCameraKey))
-            cfg.extraData.postProcessSettings.metadata.buildModel = mCameraNames.value(mCurrentCameraKey).toStdString();
-    };
-
-    applyOverrides(cameraConfig);
 
     auto dngData = utils::generateDng(
         data,
@@ -415,40 +380,13 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    auto generateTask = [this, &options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
+    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
         try {
             auto decodedFrame = sharableFuture.get();
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
-            auto applyOverrides = [this](CameraConfiguration& cfg){
-                if(mMatrixProfiles.contains(mCurrentMatrixKey)) {
-                    const auto& p = mMatrixProfiles[mCurrentMatrixKey];
-                    auto toArray = [](const QString& text){
-                        std::array<float,9> arr{0};
-                        auto parts = text.split(',', Qt::SkipEmptyParts);
-                        for(int i=0;i<parts.size() && i<9;++i)
-                            arr[i] = parts[i].toFloat();
-                        return arr;
-                    };
-                    cfg.colorMatrix1 = toArray(p.colorMatrix1);
-                    cfg.colorMatrix2 = toArray(p.colorMatrix2);
-                    cfg.forwardMatrix1 = toArray(p.forwardMatrix1);
-                    cfg.forwardMatrix2 = toArray(p.forwardMatrix2);
-                    cfg.calibrationMatrix1 = toArray(p.calibrationMatrix1);
-                    cfg.calibrationMatrix2 = toArray(p.calibrationMatrix2);
-                    if(!p.illuminant1.isEmpty())
-                        cfg.colorIlluminant1 = p.illuminant1.toStdString();
-                    if(!p.illuminant2.isEmpty())
-                        cfg.colorIlluminant2 = p.illuminant2.toStdString();
-                    if(!p.uniqueCameraModel.isEmpty())
-                        cfg.extraData.postProcessSettings.metadata.buildModel = p.uniqueCameraModel.toStdString();
-                }
-                if(mCameraNames.contains(mCurrentCameraKey))
-                    cfg.extraData.postProcessSettings.metadata.buildModel = mCameraNames.value(mCurrentCameraKey).toStdString();
-            };
-            applyOverrides(containerMetadata);
 
             auto dngData = utils::generateDng(
                 *frameData,
@@ -540,19 +478,9 @@ int VirtualFileSystemImpl_MCRAW::readFile(
     return -1;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(
-    FileRenderOptions options,
-    int draftScale,
-    const QMap<QString, QString>& cameraNames,
-    const QString& cameraKey,
-    const QMap<QString, MatrixProfile>& matrixProfiles,
-    const QString& matrixKey) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
     mDraftScale = draftScale;
     mOptions = options;
-    mCameraNames = cameraNames;
-    mCurrentCameraKey = cameraKey;
-    mMatrixProfiles = matrixProfiles;
-    mCurrentMatrixKey = matrixKey;
 
     init(options);
 }

@@ -1,9 +1,6 @@
 #pragma once
 
 #include "Types.h"
-#include "MatrixProfile.h"
-#include <QMap>
-#include <QString>
 
 #include <optional>
 #include <string>
@@ -29,13 +26,7 @@ public:
         std::function<void(size_t, int)> result,
         bool async) = 0;
 
-    virtual void updateOptions(
-        FileRenderOptions options,
-        int draftScale,
-        const QMap<QString, QString>& cameraNames,
-        const QString& cameraKey,
-        const QMap<QString, MatrixProfile>& matrixProfiles,
-        const QString& matrixKey) = 0;
+    virtual void updateOptions(FileRenderOptions options, int draftScale) = 0;
 
 protected:
     IVirtualFileSystem() = default;
