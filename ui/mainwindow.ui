@@ -91,7 +91,7 @@
          </property>
         </widget>
        </item>
-       <item row="1" column="0">
+      <item row="1" column="0">
         <layout class="QHBoxLayout" name="cacheLayout">
          <item>
           <widget class="QLabel" name="descCacheFolder">
@@ -133,8 +133,94 @@
           </widget>
          </item>
         </layout>
-       </item>
-       <item row="0" column="1">
+      </item>
+      <item row="2" column="0" colspan="2">
+       <layout class="QHBoxLayout" name="cameraSettingsLayout">
+        <item>
+         <widget class="QLabel" name="descCameraSettings">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Camera Settings:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="cameraSettingsLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>-</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="changeCameraSettingsBtn">
+          <property name="minimumSize">
+           <size>
+            <width>100</width>
+            <height>30</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Browse</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="3" column="0" colspan="2">
+       <layout class="QHBoxLayout" name="calibrationProfileLayout">
+        <item>
+         <widget class="QLabel" name="descCalibrationProfile">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Calibration Profiles:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="calibrationProfileLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+            <horstretch>1</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>-</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="changeCalibrationProfileBtn">
+          <property name="minimumSize">
+           <size>
+            <width>100</width>
+            <height>30</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>Browse</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="0" column="1">
         <widget class="QCheckBox" name="vignetteCorrectionCheckBox">
          <property name="enabled">
           <bool>true</bool>
