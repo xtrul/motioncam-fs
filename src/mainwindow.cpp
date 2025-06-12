@@ -57,8 +57,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->dragAndDropScrollArea->setAcceptDrops(true);
     ui->dragAndDropScrollArea->installEventFilter(this);
 
-    // Load calibration profiles bundled with the application
-    mCalibrationProfiles = motioncam::loadCalibrationProfiles("resources/fs-calibration.json");
+    mCalibrationProfiles = loadCalibrationProfiles("resources/fs-calibration.json");
     if(!mCalibrationProfiles.empty() && mSelectedProfile.isEmpty())
         mSelectedProfile = QString::fromStdString(mCalibrationProfiles.begin()->first);
     for(const auto& p : mCalibrationProfiles) {
