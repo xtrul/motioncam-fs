@@ -2,18 +2,15 @@
 #include "ui_SettingsDialog.h"
 
 #include <QFileDialog>
-#include <QTableWidget>
 
 SettingsDialog::SettingsDialog(QWidget* parent) :
     QDialog(parent), ui(new Ui::SettingsDialog) {
     ui->setupUi(this);
-    ui->cameraTable->setColumnCount(2);
-    ui->cameraTable->setHorizontalHeaderLabels({tr("Camera Key"), tr("Unique Camera Model")});
-    ui->cameraTable->horizontalHeader()->setStretchLastSection(true);
     connect(ui->browseCacheBtn, &QPushButton::clicked, this, &SettingsDialog::onBrowseCache);
     connect(ui->saveBtn, &QPushButton::clicked, this, &SettingsDialog::accept);
     connect(ui->cancelBtn, &QPushButton::clicked, this, &SettingsDialog::reject);
     connect(ui->matrixCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsDialog::onMatrixSetChanged);
+    connect(ui->cameraCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsDialog::onCameraKeyChanged);
 }
 
 SettingsDialog::~SettingsDialog() {
@@ -29,49 +26,30 @@ void SettingsDialog::setCachePath(const QString& path) {
 }
 
 QMap<QString, QString> SettingsDialog::cameraNames() const {
-    QMap<QString, QString> names;
-    for(int row = 0; row < ui->cameraTable->rowCount(); ++row) {
-        auto keyItem = ui->cameraTable->item(row, 0);
-        auto valItem = ui->cameraTable->item(row, 1);
-        if(keyItem)
-            names.insert(keyItem->text(), valItem ? valItem->text() : QString());
-    }
+    auto names = mCameraNames;
+    auto key = ui->cameraCombo->currentText();
+    if(names.contains(key))
+        names[key] = ui->cameraModelEdit->text();
     return names;
 }
 
 void SettingsDialog::setCameraNames(const QMap<QString, QString>& names) {
     mCameraNames = names;
-    ui->cameraTable->setRowCount(names.size());
-    int row = 0;
-    for(auto it = names.begin(); it != names.end(); ++it, ++row) {
-        auto keyItem = new QTableWidgetItem(it.key());
-        keyItem->setFlags(keyItem->flags() & ~Qt::ItemIsEditable);
-        ui->cameraTable->setItem(row, 0, keyItem);
-        ui->cameraTable->setItem(row, 1, new QTableWidgetItem(it.value()));
-    }
-    if(ui->cameraTable->rowCount() > 0)
-        ui->cameraTable->selectRow(0);
+    ui->cameraCombo->clear();
+    for(auto it = names.begin(); it != names.end(); ++it)
+        ui->cameraCombo->addItem(it.key());
+    if(!names.isEmpty())
+        onCameraKeyChanged(0);
 }
 
 QString SettingsDialog::currentCameraKey() const {
-    int row = ui->cameraTable->currentRow();
-    if(row < 0)
-        row = 0;
-    if(row >= ui->cameraTable->rowCount())
-        return {};
-    auto item = ui->cameraTable->item(row, 0);
-    return item ? item->text() : QString();
+    return ui->cameraCombo->currentText();
 }
 
 void SettingsDialog::setCurrentCameraKey(const QString& key) {
-    for(int row = 0; row < ui->cameraTable->rowCount(); ++row) {
-        if(auto item = ui->cameraTable->item(row,0); item && item->text() == key) {
-            ui->cameraTable->selectRow(row);
-            return;
-        }
-    }
-    if(ui->cameraTable->rowCount() > 0)
-        ui->cameraTable->selectRow(0);
+    int index = ui->cameraCombo->findText(key);
+    if(index >= 0)
+        ui->cameraCombo->setCurrentIndex(index);
 }
 
 QMap<QString, MatrixProfile> SettingsDialog::matrixProfiles() const {
@@ -127,6 +105,12 @@ void SettingsDialog::onMatrixSetChanged(int index) {
     ui->illuminant2Edit->setText(p.illuminant2);
 }
 
+void SettingsDialog::onCameraKeyChanged(int index) {
+    Q_UNUSED(index);
+    auto key = ui->cameraCombo->currentText();
+    if(mCameraNames.contains(key))
+        ui->cameraModelEdit->setText(mCameraNames.value(key));
+}
 
 void SettingsDialog::onBrowseCache() {
     auto folder = QFileDialog::getExistingDirectory(this, tr("Select Cache Folder"));

@@ -29,7 +29,7 @@ public:
 private slots:
     void onBrowseCache();
     void onMatrixSetChanged(int index);
-
+    void onCameraKeyChanged(int index);
 
 private:
     Ui::SettingsDialog* ui;

@@ -7,151 +7,147 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QTabWidget" name="tabWidget">
-     <widget class="QWidget" name="generalTab">
-      <attribute name="title">
-       <string>General</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_2">
-       <item>
-        <layout class="QHBoxLayout" name="cacheLayout">
-         <item>
-          <widget class="QLabel" name="labelCache">
-           <property name="text">
-            <string>Cache Folder:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="cacheEdit"/>
-         </item>
-         <item>
-          <widget class="QPushButton" name="browseCacheBtn">
-           <property name="text">
-            <string>Change...</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="cameraTab">
-      <attribute name="title">
-       <string>Camera Names</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_3">
-       <item>
-        <widget class="QTableWidget" name="cameraTable"/>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="matrixTab">
-      <attribute name="title">
-       <string>Matrix Profiles</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_4">
-       <item>
-        <widget class="QGroupBox" name="matrixGroup">
-         <property name="title">
-          <string>Profile</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="labelMatrixSet">
-            <property name="text">
-             <string>Matrix Set:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QComboBox" name="matrixCombo"/>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="labelCM1">
-            <property name="text">
-             <string>ColorMatrix1</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="colorMatrix1Edit"/>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="labelCM2">
-            <property name="text">
-             <string>ColorMatrix2</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QLineEdit" name="colorMatrix2Edit"/>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="labelFM1">
-            <property name="text">
-             <string>ForwardMatrix1</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QLineEdit" name="forwardMatrix1Edit"/>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="labelFM2">
-            <property name="text">
-             <string>ForwardMatrix2</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QLineEdit" name="forwardMatrix2Edit"/>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="labelCal1">
-            <property name="text">
-             <string>CalibrationMatrix1</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1">
-           <widget class="QLineEdit" name="calibrationMatrix1Edit"/>
-          </item>
-          <item row="6" column="0">
-           <widget class="QLabel" name="labelCal2">
-            <property name="text">
-             <string>CalibrationMatrix2</string>
-            </property>
-           </widget>
-          </item>
-          <item row="6" column="1">
-           <widget class="QLineEdit" name="calibrationMatrix2Edit"/>
-          </item>
-          <item row="7" column="0">
-           <widget class="QLabel" name="labelIll1">
-            <property name="text">
-             <string>Illuminant1</string>
-            </property>
-           </widget>
-          </item>
-          <item row="7" column="1">
-           <widget class="QLineEdit" name="illuminant1Edit"/>
-          </item>
-          <item row="8" column="0">
-           <widget class="QLabel" name="labelIll2">
-            <property name="text">
-             <string>Illuminant2</string>
-            </property>
-           </widget>
-          </item>
-          <item row="8" column="1">
-           <widget class="QLineEdit" name="illuminant2Edit"/>
-          </item>
-         </layout>
-        </widget>
-       </item>
-      </layout>
-     </widget>
+    <layout class="QHBoxLayout" name="cacheLayout">
+     <item>
+      <widget class="QLabel" name="labelCache">
+       <property name="text">
+        <string>Cache Folder:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="cacheEdit"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="browseCacheBtn">
+       <property name="text">
+        <string>Change...</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QGridLayout" name="cameraLayout">
+     <item row="0" column="0">
+      <widget class="QLabel" name="labelCameraKey">
+       <property name="text">
+        <string>Camera Key:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="cameraCombo"/>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="labelCameraModel">
+       <property name="text">
+        <string>Unique Camera Model:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLineEdit" name="cameraModelEdit"/>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="matrixGroup">
+     <property name="title">
+      <string>Matrix Profiles</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelMatrixSet">
+        <property name="text">
+         <string>Matrix Set:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="matrixCombo"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelCM1">
+        <property name="text">
+         <string>ColorMatrix1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="colorMatrix1Edit"/>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelCM2">
+        <property name="text">
+         <string>ColorMatrix2</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLineEdit" name="colorMatrix2Edit"/>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="labelFM1">
+        <property name="text">
+         <string>ForwardMatrix1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLineEdit" name="forwardMatrix1Edit"/>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="labelFM2">
+        <property name="text">
+         <string>ForwardMatrix2</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QLineEdit" name="forwardMatrix2Edit"/>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="labelCal1">
+        <property name="text">
+         <string>CalibrationMatrix1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QLineEdit" name="calibrationMatrix1Edit"/>
+      </item>
+      <item row="6" column="0">
+       <widget class="QLabel" name="labelCal2">
+        <property name="text">
+         <string>CalibrationMatrix2</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <widget class="QLineEdit" name="calibrationMatrix2Edit"/>
+      </item>
+      <item row="7" column="0">
+       <widget class="QLabel" name="labelIll1">
+        <property name="text">
+         <string>Illuminant1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="QLineEdit" name="illuminant1Edit"/>
+      </item>
+      <item row="8" column="0">
+       <widget class="QLabel" name="labelIll2">
+        <property name="text">
+         <string>Illuminant2</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="1">
+       <widget class="QLineEdit" name="illuminant2Edit"/>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
