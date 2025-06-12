@@ -22,6 +22,7 @@ set(PROJECT_SOURCES
         src/CameraMetadata.cpp
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
+        src/CalibrationProfile.cpp
         src/Utils.cpp
 
         include/mainwindow.h
@@ -31,6 +32,7 @@ set(PROJECT_SOURCES
         include/VirtualFileSystemImpl_MCRAW.h
         include/LRUCache.h
         include/AudioWriter.h
+        include/CalibrationProfile.h
         include/Measure.h
         include/SingleApplication.h
         include/CameraMetadata.h
@@ -125,7 +127,10 @@ find_package(fmt CONFIG REQUIRED)
 # set(Boost_USE_MULTITHREADED      ON)
 # set(Boost_USE_STATIC_RUNTIME    OFF)
 
-find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem algorithm locale)
+# Use the system Boost which may be older than 1.86. The features required
+# by motioncam-fs are available in Boost 1.71 and newer, so lower the
+# required version to improve portability.
+find_package(Boost 1.71 REQUIRED COMPONENTS filesystem locale)
 # if(Boost_FOUND) # find_package with REQUIRED will FATAL_ERROR if not found
 #   include_directories(${Boost_INCLUDE_DIRS}) # Usually not needed with imported targets
 # endif()
@@ -135,7 +140,6 @@ target_link_libraries(motioncam-fs PRIVATE
   Qt${QT_VERSION_MAJOR}::Network
   # Use modern Boost imported targets
   Boost::filesystem
-  Boost::algorithm
   Boost::locale
   spdlog::spdlog
   fmt::fmt
