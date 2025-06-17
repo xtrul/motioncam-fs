@@ -337,6 +337,9 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
         // Copy the data from cache
         std::memcpy(dst, cacheEntry->data() + pos, actualLen);
 
+        // Push entry to front
+        mCache.put(entry, cacheEntry);
+
         return actualLen;
     }
 
@@ -388,6 +391,8 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
             auto decodedFrame = sharableFuture.get();
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
 
+            spdlog::debug("Generating {}", entry.name);
+
             auto dngData = utils::generateDng(
                 *frameData,
                 frameMetadata,
@@ -405,13 +410,14 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
 
                 readBytes = actualLen;
                 errorCode = 0;
-
-                // Add to cache
-                cache.put(entry, dngData);
             }
+
+            // Add to cache
+            cache.put(entry, dngData);
         }
         catch(std::runtime_error& e) {
-            spdlog::error("Failed to read frame (error: {})", e.what());
+            spdlog::error("Failed to generate DNG (error: {})", e.what());
+            cache.markLoadFailed(entry);
         }
 
         result(readBytes, errorCode);
@@ -419,10 +425,10 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
         return readBytes;
     };
 
-    if(!async)
-        return generateTask();
 
-    (void)mProcessingThreadPool.submit_task(generateTask);
+    auto processFuture = mProcessingThreadPool.submit_task(generateTask);
+    if(!async)
+        return processFuture.get();
 
     return 0;
 }
