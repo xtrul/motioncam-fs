@@ -115,6 +115,11 @@ Session::~Session() {
     if(mThread && mThread->joinable())
         mThread->join();
 
+    QDir dst;
+
+    if(!dst.rmdir(mDstPath.c_str()))
+        spdlog::warn("Failed to remove {}", mDstPath);
+
     spdlog::debug("Exiting session for {}", mSrcFile);
 }
 
