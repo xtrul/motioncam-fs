@@ -253,7 +253,14 @@ void MainWindow::playFile(const QString& path) {
     QStringList arguments;
     arguments << path;
 
-    bool success = QProcess::startDetached("MotionCam_Player.exe", arguments);
+    bool success = false;
+
+#ifdef _WIN32
+    success = QProcess::startDetached("MotionCam_Player.exe", arguments);
+#elif __APPLE__
+    success = QProcess::startDetached("/usr/bin/open", arguments);
+#endif
+
     if (!success)
         QMessageBox::warning(this, "Error", QString("Failed to launch player with file: %1").arg(path));
 }
