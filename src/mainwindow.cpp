@@ -189,10 +189,6 @@ void MainWindow::mountFile(const QString& filePath) {
         return;
     }
 
-    if(mountId == motioncam::InvalidMountId) {
-        return;
-    }
-
     // Get the scroll area's content widget and its layout
     auto* scrollContent = ui->dragAndDropScrollArea->widget();
     auto* scrollLayout = qobject_cast<QVBoxLayout*>(scrollContent->layout());

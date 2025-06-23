@@ -363,7 +363,8 @@ MountId FuseFileSystemImpl_MacOs::mount(
 
         if(!dst.mkpath(dstPath.c_str())) {
             spdlog::error("Could not create path {}", dstPath);
-            return InvalidMountId;
+
+            throw std::runtime_error("Failed to create " + dstPath);
         }
     }
 
@@ -387,7 +388,8 @@ MountId FuseFileSystemImpl_MacOs::mount(
 
             if(!session) {
                 spdlog::error("Failed to mount {} to {}", srcFile, dstPath);
-                return InvalidMountId;
+
+                throw std::runtime_error("Failed to session");
             }
 
             mMountedFiles[mountId] = std::move(session);
@@ -395,15 +397,15 @@ MountId FuseFileSystemImpl_MacOs::mount(
         catch(std::runtime_error& e) {
             spdlog::error("Failed to mount {} to {} (error: {})", srcFile, dstPath, e.what());
 
-            return InvalidMountId;
+            throw std::runtime_error(e.what());
         }
 
         return mountId;
     }
 
-    spdlog::error("Failed to mount {} to {}", srcFile, dstPath);
+    spdlog::error("Failed to mount {} to {}, invalid file format", srcFile, dstPath);
 
-    return InvalidMountId;
+    throw std::runtime_error("Invalid format");
 }
 
 void FuseFileSystemImpl_MacOs::unmount(MountId mountId) {
