@@ -109,8 +109,21 @@ Session::Session(const std::string& srcFile, const std::string& dstPath, Virtual
 }
 
 Session::~Session() {
-    if(mFuseCh)
-        fuse_unmount(mDstPath.c_str(), mFuseCh);
+    auto mountPoint = mDstPath;
+    auto channel = mFuseCh;
+
+    if(channel) {
+        std::thread([mountPoint, channel]() {
+            spdlog::debug("Unmounting {}", mountPoint);
+
+            fuse_unmount(mountPoint.c_str(), channel);
+
+            spdlog::debug("Umounted {}", mountPoint);
+        }).detach();
+    }
+
+    mFuseCh = nullptr;
+    mFuse = nullptr;
 
     if(mThread && mThread->joinable())
         mThread->join();
@@ -204,6 +217,8 @@ void* Session::fuseInit(struct fuse_conn_info* conn) {
 }
 
 void Session::fuseDestroy(void* privateData) {
+    spdlog::debug("fuseDestroy() entering");
+
     auto* context = reinterpret_cast<FuseContext*>(privateData);
 
     if(context->fs)
@@ -213,6 +228,8 @@ void Session::fuseDestroy(void* privateData) {
     context->nextFileHandle = INT_MIN;
 
     delete context;
+
+    spdlog::debug("fuseDestroy() exiting");
 }
 
 int Session::fuseGetattr(const char* path, struct stat* stbuf) {

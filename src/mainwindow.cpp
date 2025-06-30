@@ -250,15 +250,12 @@ void MainWindow::mountFile(const QString& filePath) {
 }
 
 void MainWindow::playFile(const QString& path) {
-    QStringList arguments;
-    arguments << path;
-
     bool success = false;
 
 #ifdef _WIN32
-    success = QProcess::startDetached("MotionCam_Player.exe", arguments);
+    success = QProcess::startDetached("MotionCam_Player.exe", QStringList() << path);
 #elif __APPLE__
-    success = QProcess::startDetached("/usr/bin/open", arguments);
+    success = QProcess::startDetached("/usr/bin/open", QStringList() << "-a" << "MotionCam Player" << path);
 #endif
 
     if (!success)
