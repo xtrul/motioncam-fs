@@ -183,12 +183,26 @@
             </property>
            </item>
           </widget>
+       </item>
+       <item row="2" column="0" colspan="2">
+        <layout class="QHBoxLayout" name="calibrationLayout">
+         <item>
+          <widget class="QLabel" name="calibrationLabel">
+           <property name="text">
+            <string>Calibration:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="calibrationProfileCombo"/>
          </item>
         </layout>
        </item>
       </layout>
-     </widget>
-    </item>
+      </item>
+     </layout>
+    </widget>
+   </item>
    </layout>
   </widget>
  </widget>
