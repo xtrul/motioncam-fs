@@ -10,6 +10,12 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QSettings>
+#include <QMenuBar>
+#include <QAction>
+#include "AdvancedOptionsDialog.h"
+#include "CalibrationProfile.h"
+#include <utility>
+#include <QVBoxLayout>
 #include <algorithm>
 
 #ifdef _WIN32
@@ -45,6 +51,23 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    // Create menu bar
+    auto fileMenu = menuBar()->addMenu("&File");
+    auto unmountAction = fileMenu->addAction("Unmount All");
+    auto exitAction = fileMenu->addAction("Exit");
+    connect(unmountAction, &QAction::triggered, this, &MainWindow::onUnmountAll);
+    connect(exitAction, &QAction::triggered, this, &MainWindow::close);
+
+    auto advMenu = menuBar()->addMenu("&Advanced");
+    auto optionsAction = advMenu->addAction("Options...");
+    connect(optionsAction, &QAction::triggered, this, &MainWindow::onAdvancedOptions);
+
+    auto helpMenu = menuBar()->addMenu("&Help");
+    auto aboutAction = helpMenu->addAction("About");
+    connect(aboutAction, &QAction::triggered, [this]() {
+        QMessageBox::about(this, tr("About"), tr("MotionCam FS"));
+    });
+
 #ifdef _WIN32
     mFuseFilesystem = std::make_unique<motioncam::FuseFileSystemImpl_Win>();
 #elif __APPLE__
@@ -64,6 +87,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
     connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
+    connect(ui->calibrationProfileCombo, &QComboBox::currentTextChanged, [this](const QString& text){
+        mSelectedProfile = (text == "None") ? QString() : text;
+        onRenderSettingsChanged(Qt::CheckState::Checked);
+    });
 }
 
 MainWindow::~MainWindow() {
@@ -80,6 +107,9 @@ void MainWindow::saveSettings() {
     settings.setValue("scaleRaw", ui->scaleRawCheckBox->checkState() == Qt::CheckState::Checked);
     settings.setValue("cachePath", mCacheRootFolder);
     settings.setValue("draftQuality", mDraftQuality);
+    settings.setValue("calibrationFile", mCalibrationFile);
+    settings.setValue("calibrationProfile", mSelectedProfile);
+    settings.setValue("uniqueCameraModel", mUniqueCameraModel);
 
     // Save mounted files
     settings.beginWriteArray("mountedFiles");
@@ -104,8 +134,19 @@ void MainWindow::restoreSettings() {
     ui->scaleRawCheckBox->setCheckState(
         settings.value("scaleRaw").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
 
-    mCacheRootFolder = settings.value("cachePath").toString();    
+    mCacheRootFolder = settings.value("cachePath").toString();
     mDraftQuality = std::max(1, settings.value("draftQuality").toInt());
+    mCalibrationFile = settings.value("calibrationFile").toString();
+    mSelectedProfile = settings.value("calibrationProfile").toString();
+    if(!mCalibrationFile.isEmpty()) {
+        mCalibrationProfiles = motioncam::loadCalibrationProfiles(mCalibrationFile.toStdString());
+        ui->calibrationProfileCombo->addItem("None");
+        for(const auto& kv : mCalibrationProfiles)
+            ui->calibrationProfileCombo->addItem(QString::fromStdString(kv.first));
+        if(!mSelectedProfile.isEmpty())
+            ui->calibrationProfileCombo->setCurrentText(mSelectedProfile);
+    }
+    mUniqueCameraModel = settings.value("uniqueCameraModel").toString();
 
     if(mDraftQuality == 2)
         ui->draftQuality->setCurrentIndex(0);
@@ -183,6 +224,13 @@ void MainWindow::mountFile(const QString& filePath) {
     try {
         mountId = mFuseFilesystem->mount(
             getRenderOptions(*ui), mDraftQuality, filePath.toStdString(), dstPath.toStdString());
+        const CalibrationProfile* profilePtr = nullptr;
+        if(!mSelectedProfile.isEmpty()) {
+            auto it = mCalibrationProfiles.find(mSelectedProfile.toStdString());
+            if(it != mCalibrationProfiles.end())
+                profilePtr = &it->second;
+        }
+        mFuseFilesystem->updateOptions(mountId, getRenderOptions(*ui), mDraftQuality, profilePtr);
     }
     catch(std::runtime_error& e) {
         QMessageBox::critical(this, "Error", QString("There was an error mounting the file. (error: %1)").arg(e.what()));
@@ -313,8 +361,14 @@ void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
 
     updateUi();
 
+    const CalibrationProfile* profilePtr = nullptr;
+    if(!mSelectedProfile.isEmpty()) {
+        auto itProf = mCalibrationProfiles.find(mSelectedProfile.toStdString());
+        if(itProf != mCalibrationProfiles.end())
+            profilePtr = &itProf->second;
+    }
     while(it != mMountedFiles.end()) {
-        mFuseFilesystem->updateOptions(it->mountId, renderOptions, mDraftQuality);
+        mFuseFilesystem->updateOptions(it->mountId, renderOptions, mDraftQuality, profilePtr);
         ++it;
     }
 }
@@ -342,4 +396,51 @@ void MainWindow::onSetCacheFolder(bool checked) {
 
     mCacheRootFolder = folderPath;
     ui->cacheFolderLabel->setText(mCacheRootFolder);
+}
+
+
+void MainWindow::onUnmountAll() {
+    for(auto& f : mMountedFiles)
+        mFuseFilesystem->unmount(f.mountId);
+    mMountedFiles.clear();
+
+    auto* scrollContent = ui->dragAndDropScrollArea->widget();
+    auto* scrollLayout = qobject_cast<QVBoxLayout*>(scrollContent->layout());
+    while(auto item = scrollLayout->takeAt(0)) {
+        if(item->widget())
+            item->widget()->deleteLater();
+    }
+    ui->dragAndDropLabel->show();
+}
+
+void MainWindow::onAdvancedOptions() {
+    AdvancedOptionsDialog dlg(this);
+    dlg.setUniqueCameraModel(mUniqueCameraModel);
+    dlg.setCalibrationFile(mCalibrationFile);
+    dlg.setProfiles(mCalibrationProfiles);
+
+    if(dlg.exec() == QDialog::Accepted) {
+        mUniqueCameraModel = dlg.uniqueCameraModel();
+        mCalibrationFile = dlg.calibrationFile();
+        mSelectedProfile = dlg.selectedProfile();
+        if(!mCalibrationFile.isEmpty())
+            mCalibrationProfiles = motioncam::loadCalibrationProfiles(mCalibrationFile.toStdString());
+
+        const CalibrationProfile* profilePtr = nullptr;
+        if(!mSelectedProfile.isEmpty()) {
+            auto it = mCalibrationProfiles.find(mSelectedProfile.toStdString());
+            if(it != mCalibrationProfiles.end())
+                profilePtr = &it->second;
+        }
+        auto renderOptions = getRenderOptions(*ui);
+        for(const auto& f : mMountedFiles)
+            mFuseFilesystem->updateOptions(f.mountId, renderOptions, mDraftQuality, profilePtr);
+
+        ui->calibrationProfileCombo->clear();
+        ui->calibrationProfileCombo->addItem("None");
+        for(const auto& kv : mCalibrationProfiles)
+            ui->calibrationProfileCombo->addItem(QString::fromStdString(kv.first));
+        if(!mSelectedProfile.isEmpty())
+            ui->calibrationProfileCombo->setCurrentText(mSelectedProfile);
+    }
 }
