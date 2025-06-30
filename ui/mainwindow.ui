@@ -143,8 +143,8 @@
           <string>Apply vignette correction</string>
          </property>
         </widget>
-       </item>
-       <item row="0" column="0">
+      </item>
+      <item row="0" column="0">
         <layout class="QHBoxLayout" name="draftLayout">
          <item>
           <widget class="QCheckBox" name="draftModeCheckBox">
@@ -185,10 +185,12 @@
           </widget>
          </item>
         </layout>
-       </item>
-      </layout>
-     </widget>
-    </item>
+      </item>
+      <item row="2" column="0" colspan="2">
+      </item>
+     </layout>
+    </widget>
+   </item>
    </layout>
   </widget>
  </widget>
