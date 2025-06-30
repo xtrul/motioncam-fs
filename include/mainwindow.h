@@ -6,8 +6,6 @@
 #include <QMainWindow>
 #include <QList>
 #include <QString>
-#include <map>
-#include "CalibrationProfile.h"
 
 namespace motioncam {
     struct MountedFile {
@@ -68,8 +66,6 @@ private slots:
     void onRenderSettingsChanged(const Qt::CheckState &state);
     void onDraftModeQualityChanged(int index);
     void onSetCacheFolder(bool checked);
-    void onUnmountAll();
-    void onAdvancedOptions();
 
     void playFile(const QString& path);
     void removeFile(QWidget* fileWidget);
@@ -78,7 +74,6 @@ private:
     void saveSettings();
     void restoreSettings();
     void updateUi();
-    void applyCalibration();
 
 private:
     Ui::MainWindow *ui;
@@ -86,10 +81,6 @@ private:
     QList<motioncam::MountedFile> mMountedFiles;
     QString mCacheRootFolder;
     int mDraftQuality;
-    std::map<std::string, motioncam::CalibrationProfile> mCalibrationProfiles;
-    QString mCalibrationFile;
-    QString mSelectedProfile;
-    QString mUniqueCameraModel;
 };
 
 #endif // MAINWINDOW_H
