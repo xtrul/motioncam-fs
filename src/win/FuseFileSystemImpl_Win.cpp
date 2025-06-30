@@ -81,7 +81,7 @@ public:
     ~Session();
 
 public:
-    void updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile);
+    void updateOptions(FileRenderOptions options, int draftScale);
 
 protected:
     HRESULT StartDirEnum(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ const GUID* EnumerationId) override;
@@ -156,12 +156,12 @@ Session::~Session() {
     Stop();
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile) {
+void Session::updateOptions(FileRenderOptions options, int draftScale) {
     mOptions = options;
     mDraftScale = draftScale;
 
     // Tell file system about new options
-    mFs->updateOptions(options, draftScale, profile);
+    mFs->updateOptions(options, draftScale);
 
     // We need to clear out the cache
     auto files = mFs->listFiles();
@@ -536,13 +536,13 @@ void FuseFileSystemImpl_Win::unmount(MountId mountId) {
     mMountedFiles.erase(mountId);
 }
 
-void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options, int draftScale, const CalibrationProfile* profile) {
+void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
     auto it = mMountedFiles.find(mountId);
     if(it == mMountedFiles.end())
         return;
 
     dynamic_cast<Session*>(mMountedFiles[mountId].get())->updateOptions(
-        options, draftScale, profile);
+        options, draftScale);
 }
 
 } // namespace motioncam
