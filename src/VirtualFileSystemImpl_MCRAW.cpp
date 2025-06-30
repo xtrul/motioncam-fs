@@ -194,7 +194,8 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         mTypicalDngSize(0),
         mFps(0),
         mDraftScale(draftScale),
-        mOptions(options) {
+        mOptions(options),
+        mCalibration(nullptr) {
 
     init(options);
 }
@@ -383,7 +384,7 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
+    auto generateTask = [this, &options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
@@ -392,6 +393,20 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
 
             spdlog::debug("Generating {}", entry.name);
+
+            if(this->mCalibration) {
+                containerMetadata.colorMatrix1 = this->mCalibration->colorMatrix1;
+                containerMetadata.colorMatrix2 = this->mCalibration->colorMatrix2;
+                containerMetadata.forwardMatrix1 = this->mCalibration->forwardMatrix1;
+                containerMetadata.forwardMatrix2 = this->mCalibration->forwardMatrix2;
+                containerMetadata.calibrationMatrix1 = this->mCalibration->calibrationMatrix1;
+                containerMetadata.calibrationMatrix2 = this->mCalibration->calibrationMatrix2;
+                containerMetadata.colorIlluminant1 = this->mCalibration->colorIlluminant1;
+                containerMetadata.colorIlluminant2 = this->mCalibration->colorIlluminant2;
+            }
+            if(!this->mUniqueCameraModel.empty()) {
+                containerMetadata.extraData.postProcessSettings.metadata.buildModel = this->mUniqueCameraModel;
+            }
 
             auto dngData = utils::generateDng(
                 *frameData,
@@ -484,9 +499,11 @@ int VirtualFileSystemImpl_MCRAW::readFile(
     return -1;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile, const std::string* uniqueCameraModel) {
     mDraftScale = draftScale;
     mOptions = options;
+    mCalibration = profile;
+    mUniqueCameraModel = uniqueCameraModel ? *uniqueCameraModel : std::string{};
 
     init(options);
 }
