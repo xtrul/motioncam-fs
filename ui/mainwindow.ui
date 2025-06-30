@@ -143,8 +143,8 @@
           <string>Apply vignette correction</string>
          </property>
         </widget>
-      </item>
-      <item row="0" column="0">
+       </item>
+       <item row="0" column="0">
         <layout class="QHBoxLayout" name="draftLayout">
          <item>
           <widget class="QCheckBox" name="draftModeCheckBox">
@@ -185,24 +185,10 @@
           </widget>
          </item>
         </layout>
-      </item>
-      <item row="2" column="0" colspan="2">
-       <layout class="QHBoxLayout" name="calibrationLayout">
-        <item>
-         <widget class="QLabel" name="calibrationLabel">
-          <property name="text">
-           <string>Calibration</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QComboBox" name="calibrationProfileCombo"/>
-        </item>
-       </layout>
-      </item>
-     </layout>
-    </widget>
-   </item>
+       </item>
+      </layout>
+     </widget>
+    </item>
    </layout>
   </widget>
  </widget>

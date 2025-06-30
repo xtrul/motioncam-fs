@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Types.h"
-#include "CalibrationProfile.h"
 
 #include <optional>
 #include <string>
@@ -27,7 +26,7 @@ public:
         std::function<void(size_t, int)> result,
         bool async) = 0;
 
-    virtual void updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile) = 0;
+    virtual void updateOptions(FileRenderOptions options, int draftScale) = 0;
 
 protected:
     IVirtualFileSystem() = default;
