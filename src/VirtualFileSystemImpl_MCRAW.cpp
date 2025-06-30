@@ -383,7 +383,7 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
 
-    auto generateTask = [this, &options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
+    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
@@ -392,10 +392,6 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
             auto [frameIndex, containerMetadata, frameMetadata, frameData] = std::move(decodedFrame);
 
             spdlog::debug("Generating {}", entry.name);
-
-            if(!this->mUniqueCameraModel.empty()) {
-                containerMetadata.extraData.postProcessSettings.metadata.buildModel = this->mUniqueCameraModel;
-            }
 
             auto dngData = utils::generateDng(
                 *frameData,
@@ -488,10 +484,9 @@ int VirtualFileSystemImpl_MCRAW::readFile(
     return -1;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale, const std::string* uniqueCameraModel) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
     mDraftScale = draftScale;
     mOptions = options;
-    mUniqueCameraModel = uniqueCameraModel ? *uniqueCameraModel : std::string{};
 
     init(options);
 }

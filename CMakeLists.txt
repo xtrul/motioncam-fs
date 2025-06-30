@@ -27,10 +27,8 @@ set(PROJECT_SOURCES
         src/CameraFrameMetadata.cpp
         src/AudioWriter.cpp
         src/Utils.cpp
-        src/AdvancedOptionsDialog.cpp
 
         include/mainwindow.h
-        include/AdvancedOptionsDialog.h
         include/Types.h
         include/IVirtualFileSystem.h
         include/IFuseFileSystem.h
@@ -44,7 +42,6 @@ set(PROJECT_SOURCES
         include/Utils.h
 
         ui/mainwindow.ui
-        ui/advancedoptionsdialog.ui
 )
 
 qt_add_resources(PROJECT_SOURCES resources.qrc)

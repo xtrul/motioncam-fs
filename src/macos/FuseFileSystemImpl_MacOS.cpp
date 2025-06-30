@@ -73,7 +73,7 @@ public:
     Session(const std::string& srcFile, const std::string& dstPath, VirtualFileSystemImpl_MCRAW* fs);
     ~Session();
 
-    void updateOptions(FileRenderOptions options, int draftScale, const std::string* uniqueCameraModel);
+    void updateOptions(FileRenderOptions options, int draftScale);
 
 private:
     void init(VirtualFileSystemImpl_MCRAW* fs);
@@ -176,9 +176,9 @@ void Session::init(VirtualFileSystemImpl_MCRAW* fs) {
 
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale, const std::string* uniqueCameraModel) {
-    mFs->updateOptions(options, draftScale, uniqueCameraModel);
-    
+void Session::updateOptions(FileRenderOptions options, int draftScale) {
+    mFs->updateOptions(options, draftScale);
+
     fuse_invalidate_path(mFuse, mDstPath.c_str());
 
 }
@@ -415,10 +415,10 @@ void FuseFileSystemImpl_MacOs::unmount(MountId mountId) {
     }
 }
 
-void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale, const std::string* uniqueCameraModel) {
+void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
     auto it = mMountedFiles.find(mountId);
     if(it != mMountedFiles.end()) {
-        it->second->updateOptions(options, draftScale, uniqueCameraModel);
+        it->second->updateOptions(options, draftScale);
     }
 }
 
