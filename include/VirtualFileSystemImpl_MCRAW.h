@@ -35,7 +35,7 @@ public:
         std::function<void(size_t, int)> result,
         bool async=true) override;
 
-    void updateOptions(FileRenderOptions options, int draftScale) override;
+    void updateOptions(FileRenderOptions options, int draftScale, const std::string* uniqueCameraModel) override;
 
 private:
     void init(FileRenderOptions options);
@@ -69,6 +69,7 @@ private:
     FileRenderOptions mOptions;
     float mFps;
     std::mutex mMutex;
+    std::string mUniqueCameraModel;
 };
 
 } // namespace motioncam
