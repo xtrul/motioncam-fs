@@ -73,7 +73,7 @@ public:
     Session(const std::string& srcFile, const std::string& dstPath, VirtualFileSystemImpl_MCRAW* fs);
     ~Session();
 
-    void updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile);
+    void updateOptions(FileRenderOptions options, int draftScale);
 
 private:
     void init(VirtualFileSystemImpl_MCRAW* fs);
@@ -176,9 +176,9 @@ void Session::init(VirtualFileSystemImpl_MCRAW* fs) {
 
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile) {
-    mFs->updateOptions(options, draftScale, profile);
-    
+void Session::updateOptions(FileRenderOptions options, int draftScale) {
+    mFs->updateOptions(options, draftScale);
+
     fuse_invalidate_path(mFuse, mDstPath.c_str());
 
 }
@@ -415,10 +415,10 @@ void FuseFileSystemImpl_MacOs::unmount(MountId mountId) {
     }
 }
 
-void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale, const CalibrationProfile* profile) {
+void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
     auto it = mMountedFiles.find(mountId);
     if(it != mMountedFiles.end()) {
-        it->second->updateOptions(options, draftScale, profile);
+        it->second->updateOptions(options, draftScale);
     }
 }
 
