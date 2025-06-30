@@ -4,7 +4,6 @@
 #include <memory>
 
 #include "IFuseFileSystem.h"
-#include "../CalibrationProfile.h"
 
 namespace BS {
     class thread_pool;
@@ -23,7 +22,7 @@ public:
 
     MountId mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) override;
     void unmount(MountId mountId) override;
-    void updateOptions(MountId mountId, FileRenderOptions options, int draftScale, const CalibrationProfile* profile, const std::string* uniqueCameraModel) override;
+    void updateOptions(MountId mountId, FileRenderOptions options, int draftScale) override;
 
 private:
     MountId mNextMountId;

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <IVirtualFileSystem.h>
-#include "CalibrationProfile.h"
 
 namespace BS {
 class thread_pool;
@@ -36,7 +35,7 @@ public:
         std::function<void(size_t, int)> result,
         bool async=true) override;
 
-    void updateOptions(FileRenderOptions options, int draftScale, const CalibrationProfile* profile, const std::string* uniqueCameraModel) override;
+    void updateOptions(FileRenderOptions options, int draftScale) override;
 
 private:
     void init(FileRenderOptions options);
@@ -70,8 +69,6 @@ private:
     FileRenderOptions mOptions;
     float mFps;
     std::mutex mMutex;
-    const CalibrationProfile* mCalibration;
-    std::string mUniqueCameraModel;
 };
 
 } // namespace motioncam
