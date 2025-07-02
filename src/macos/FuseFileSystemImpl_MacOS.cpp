@@ -6,16 +6,17 @@
 #include <boost/filesystem.hpp>
 
 #include <iostream>
+#include <pwd.h>
+#include <unistd.h>
+
 #include <BS_thread_pool.hpp>
-
 #include <fuse_t/fuse_t.h>
-
 #include <QDir>
 
 // Logging
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/rotating_file_sink.h>
 
 namespace fs = boost::filesystem;
 
@@ -26,33 +27,48 @@ constexpr auto IO_THREADS = 4;
 
 namespace {
 
+std::string getLogDirectory() {
+    std::string logPath;
+
+    const char* home = getenv("HOME");
+    if (!home) {
+        // Fallback to getpwuid if HOME is not set
+        struct passwd* pw = getpwuid(getuid());
+        home = pw->pw_dir;
+    }
+
+    logPath = std::string(home) + "/Library/Logs/MotionCam Tools";
+
+    // Create directory if it doesn't exist
+    std::filesystem::create_directories(logPath);
+
+    return logPath;
+}
+
 void setupLogging() {
     try {
-        // Create a vector of sinks
+        std::string logDir = getLogDirectory();
+        std::string logFile = logDir + "/fuse.txt";
+
         std::vector<spdlog::sink_ptr> sinks;
 
-        // Regular console output
+        // Console sink
         sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
 
-        // File sink
-        sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("logs/logfile.txt", true));
+        // Rotating file sink: max 5MB per file, keep 3 files
+        sinks.push_back(std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            logFile, 1024 * 1024 * 5, 3));
 
-        // Create a logger with all sinks
         auto logger = std::make_shared<spdlog::logger>("multi_sink", sinks.begin(), sinks.end());
-
-        // Set as default logger
         spdlog::set_default_logger(logger);
 
-        // Set log level
 #ifdef NDEBUG
         spdlog::set_level(spdlog::level::info);
 #else
         spdlog::set_level(spdlog::level::debug);
 #endif
 
-        // Flush on info level messages
         spdlog::flush_on(spdlog::level::info);
-
     }
     catch (const spdlog::spdlog_ex& ex) {
         std::cerr << "Log initialization failed: " << ex.what() << std::endl;
