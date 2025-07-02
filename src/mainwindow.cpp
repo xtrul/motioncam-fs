@@ -212,11 +212,14 @@ void MainWindow::mountFile(const QString& filePath) {
     // Add a spacer to push the button to the right
     fileLayout->addStretch();
 
+    // Define consistent button size
+    const int buttonWidth = 100;
+    const int buttonHeight = 30;
+
     // Create and add the remove button
     auto* playButton = new QPushButton("Play", fileWidget);
 
-    playButton->setMaximumWidth(100);
-    playButton->setMaximumHeight(30);
+    playButton->setFixedSize(buttonWidth, buttonHeight);
     playButton->setIcon(QIcon(":/assets/play_btn.png"));
 
     fileLayout->addWidget(playButton);
@@ -224,8 +227,7 @@ void MainWindow::mountFile(const QString& filePath) {
     // Create and add the remove button
     auto* removeButton = new QPushButton("Remove", fileWidget);
 
-    removeButton->setMaximumWidth(100);
-    removeButton->setMaximumHeight(30);
+    removeButton->setFixedSize(buttonWidth, buttonHeight);
     removeButton->setIcon(QIcon(":/assets/remove_btn.png"));
 
     fileLayout->addWidget(removeButton);
@@ -253,7 +255,10 @@ void MainWindow::playFile(const QString& path) {
     bool success = false;
 
 #ifdef _WIN32
-    success = QProcess::startDetached("MotionCam_Player.exe", QStringList() << path);
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString playerPath = QDir(appDir).absoluteFilePath("../Player/MotionCamPlayer.exe");
+
+    success = QProcess::startDetached(QDir::cleanPath(playerPath), QStringList() << path);
 #elif __APPLE__
     success = QProcess::startDetached("/usr/bin/open", QStringList() << "-a" << "MotionCam Player" << path);
 #endif

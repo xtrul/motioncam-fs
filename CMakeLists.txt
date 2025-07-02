@@ -48,7 +48,9 @@ set(PROJECT_SOURCES
         ui/mainwindow.ui
 )
 
-qt_add_resources(PROJECT_SOURCES resources.qrc)
+qt_add_resources(PROJECT_SOURCES
+    resources.qrc
+    qdarkstyle/dark/darkstyle.qrc)
 
 if(WIN32)
     list(APPEND PROJECT_SOURCES
