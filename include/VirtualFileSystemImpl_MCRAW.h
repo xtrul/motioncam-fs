@@ -1,6 +1,7 @@
 #pragma once
 
 #include <IVirtualFileSystem.h>
+#include <IFuseFileSystem.h>
 
 namespace BS {
 class thread_pool;
@@ -36,6 +37,8 @@ public:
         bool async=true) override;
 
     void updateOptions(FileRenderOptions options, int draftScale) override;
+    
+    FileInfo getFileInfo() const;
 
 private:
     void init(FileRenderOptions options);
@@ -68,6 +71,10 @@ private:
     int mDraftScale;
     FileRenderOptions mOptions;
     float mFps;
+    int mTotalFrames;
+    int mDroppedFrames;
+    int mWidth;
+    int mHeight;
     std::mutex mMutex;
 };
 

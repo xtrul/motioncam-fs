@@ -23,6 +23,7 @@ public:
     MountId mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) override;
     void unmount(MountId mountId) override;
     void updateOptions(MountId mountId, FileRenderOptions options, int draftScale) override;
+    std::optional<FileInfo> getFileInfo(MountId mountId) override;
 
 private:
     MountId mNextMountId;

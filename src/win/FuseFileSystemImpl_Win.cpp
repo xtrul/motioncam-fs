@@ -84,6 +84,7 @@ public:
 
 public:
     void updateOptions(FileRenderOptions options, int draftScale);
+    FileInfo getFileInfo() const;
 
 protected:
     HRESULT StartDirEnum(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ const GUID* EnumerationId) override;
@@ -206,6 +207,10 @@ void Session::updateOptions(FileRenderOptions options, int draftScale) {
                               fullPath, static_cast<unsigned int>(hr), static_cast<unsigned int>(failureReason));
         }
     }
+}
+
+FileInfo Session::getFileInfo() const {
+    return mFs->getFileInfo();
 }
 
 HRESULT Session::StartDirEnum(_In_ const PRJ_CALLBACK_DATA* CallbackData, _In_ const GUID* EnumerationId) {
@@ -583,6 +588,14 @@ void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions op
 
     dynamic_cast<Session*>(mMountedFiles[mountId].get())->updateOptions(
         options, draftScale);
+}
+
+std::optional<FileInfo> FuseFileSystemImpl_Win::getFileInfo(MountId mountId) {
+    auto it = mMountedFiles.find(mountId);
+    if(it != mMountedFiles.end()) {
+        return dynamic_cast<Session*>(it->second.get())->getFileInfo();
+    }
+    return std::nullopt;
 }
 
 } // namespace motioncam
