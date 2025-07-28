@@ -68,6 +68,7 @@ private slots:
     void onSetCacheFolder(bool checked);
 
     void playFile(const QString& path);
+    void openMountedDirectory(QWidget* fileWidget);
     void removeFile(QWidget* fileWidget);
 
 private:
