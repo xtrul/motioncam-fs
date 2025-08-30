@@ -290,8 +290,8 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
     newWidth = (newWidth / 4) * 4;
     newHeight = (newHeight / 4) * 4;
 
-    const auto& srcBlackLevel = cameraConfiguration.blackLevel;
-    const float srcWhiteLevel = cameraConfiguration.whiteLevel;
+    const auto& srcBlackLevel = metadata.dynamicBlackLevel[0] > 0 ? metadata.dynamicBlackLevel : cameraConfiguration.blackLevel;
+    const auto srcWhiteLevel = metadata.dynamicWhiteLevel > 0 ? metadata.dynamicWhiteLevel : cameraConfiguration.whiteLevel;
 
     const std::array<float, 4> linear = {
         1.0f / (srcWhiteLevel - srcBlackLevel[0]),
@@ -301,7 +301,7 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
     };
 
     std::array<unsigned short, 4> dstBlackLevel = srcBlackLevel;
-    float dstWhiteLevel = srcWhiteLevel;
+    auto dstWhiteLevel = srcWhiteLevel;
 
     // Calculate shading map offsets
     auto lensShadingMap = metadata.lensShadingMap;
@@ -376,10 +376,10 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
             const float p2 = std::max(0.0f, linear[2] * (s2 - srcBlackLevel[2]) * shadingMapVals[cfa[2]]) * (dstWhiteLevel - dstBlackLevel[2]);
             const float p3 = std::max(0.0f, linear[3] * (s3 - srcBlackLevel[3]) * shadingMapVals[cfa[3]]) * (dstWhiteLevel - dstBlackLevel[3]);
 
-            s0 = std::clamp(std::round((p0 + dstBlackLevel[0])), 0.f, dstWhiteLevel);
-            s1 = std::clamp(std::round((p1 + dstBlackLevel[1])), 0.f, dstWhiteLevel);
-            s2 = std::clamp(std::round((p2 + dstBlackLevel[2])), 0.f, dstWhiteLevel);
-            s3 = std::clamp(std::round((p3 + dstBlackLevel[3])), 0.f, dstWhiteLevel);
+            s0 = std::clamp(std::round((p0 + static_cast<float>(dstBlackLevel[0]))), 0.f, static_cast<float>(dstWhiteLevel));
+            s1 = std::clamp(std::round((p1 + static_cast<float>(dstBlackLevel[1]))), 0.f, static_cast<float>(dstWhiteLevel));
+            s2 = std::clamp(std::round((p2 + static_cast<float>(dstBlackLevel[2]))), 0.f, static_cast<float>(dstWhiteLevel));
+            s3 = std::clamp(std::round((p3 + static_cast<float>(dstBlackLevel[3]))), 0.f, static_cast<float>(dstWhiteLevel));
 
             // Copy the 2x2 Bayer block
             dstData[dstOffset]                 = static_cast<unsigned short>(s0);

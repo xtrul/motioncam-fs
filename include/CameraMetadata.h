@@ -82,7 +82,7 @@ struct CameraConfiguration {
     std::array<float, 9> forwardMatrix2;
     int numSegments;
     std::string sensorArrangement;
-    float whiteLevel;
+    unsigned short whiteLevel;
 
     static CameraConfiguration parse(const std::string& jsonString);
     static CameraConfiguration parse(const nlohmann::json& j);

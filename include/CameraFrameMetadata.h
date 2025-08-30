@@ -18,8 +18,8 @@ enum class ScreenOrientation : int {
 struct CameraFrameMetadata {
     std::array<float, 3> asShotNeutral;
     int compressionType;
-    std::array<float, 4> dynamicBlackLevel;
-    double dynamicWhiteLevel;
+    std::array<unsigned short, 4> dynamicBlackLevel;
+    unsigned short dynamicWhiteLevel;
     int exposureCompensation;
     double exposureTime;
     std::string filename;
