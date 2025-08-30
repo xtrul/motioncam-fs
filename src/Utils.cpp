@@ -290,8 +290,8 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
     newWidth = (newWidth / 4) * 4;
     newHeight = (newHeight / 4) * 4;
 
-    const auto& srcBlackLevel = metadata.dynamicBlackLevel[0] > 0 ? metadata.dynamicBlackLevel : cameraConfiguration.blackLevel;
-    const auto srcWhiteLevel = metadata.dynamicWhiteLevel > 0 ? metadata.dynamicWhiteLevel : cameraConfiguration.whiteLevel;
+    const auto& srcBlackLevel = metadata.dynamicBlackLevel[0] > 0.0f ? metadata.dynamicBlackLevel : cameraConfiguration.blackLevel;
+    const auto srcWhiteLevel = metadata.dynamicWhiteLevel > 0.0f ? metadata.dynamicWhiteLevel : cameraConfiguration.whiteLevel;
 
     const std::array<float, 4> linear = {
         1.0f / (srcWhiteLevel - srcBlackLevel[0]),
@@ -300,7 +300,7 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
         1.0f / (srcWhiteLevel - srcBlackLevel[3])
     };
 
-    std::array<unsigned short, 4> dstBlackLevel = srcBlackLevel;
+    auto dstBlackLevel = srcBlackLevel;
     auto dstWhiteLevel = srcWhiteLevel;
 
     // Calculate shading map offsets
@@ -321,8 +321,9 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
         int useBits = std::min(16, srcBits + 4);
 
         dstWhiteLevel = std::pow(2.0f, useBits) - 1;
+
         for(auto& v : dstBlackLevel)
-            v <<= (useBits - srcBits);
+            v *= (1 << (useBits - srcBits));
 
         if(normaliseShadingMap)
             normalizeShadingMap(lensShadingMap);
@@ -376,10 +377,10 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
             const float p2 = std::max(0.0f, linear[2] * (s2 - srcBlackLevel[2]) * shadingMapVals[cfa[2]]) * (dstWhiteLevel - dstBlackLevel[2]);
             const float p3 = std::max(0.0f, linear[3] * (s3 - srcBlackLevel[3]) * shadingMapVals[cfa[3]]) * (dstWhiteLevel - dstBlackLevel[3]);
 
-            s0 = std::clamp(std::round((p0 + static_cast<float>(dstBlackLevel[0]))), 0.f, static_cast<float>(dstWhiteLevel));
-            s1 = std::clamp(std::round((p1 + static_cast<float>(dstBlackLevel[1]))), 0.f, static_cast<float>(dstWhiteLevel));
-            s2 = std::clamp(std::round((p2 + static_cast<float>(dstBlackLevel[2]))), 0.f, static_cast<float>(dstWhiteLevel));
-            s3 = std::clamp(std::round((p3 + static_cast<float>(dstBlackLevel[3]))), 0.f, static_cast<float>(dstWhiteLevel));
+            s0 = std::clamp(std::round((p0 + dstBlackLevel[0])), 0.f, dstWhiteLevel);
+            s1 = std::clamp(std::round((p1 + dstBlackLevel[1])), 0.f, dstWhiteLevel);
+            s2 = std::clamp(std::round((p2 + dstBlackLevel[2])), 0.f, dstWhiteLevel);
+            s3 = std::clamp(std::round((p3 + dstBlackLevel[3])), 0.f, dstWhiteLevel);
 
             // Copy the 2x2 Bayer block
             dstData[dstOffset]                 = static_cast<unsigned short>(s0);
@@ -397,7 +398,12 @@ std::tuple<std::vector<uint8_t>, std::array<unsigned short, 4>, unsigned short> 
     inOutWidth = newWidth;
     inOutHeight = newHeight;
 
-    return std::make_tuple(dst, dstBlackLevel, static_cast<unsigned short>(dstWhiteLevel));
+    std::array<unsigned short, 4> blackLevelResult;
+
+    for(auto i = 0; i < dstBlackLevel.size(); ++i)
+        blackLevelResult[i] = static_cast<unsigned short>(std::round(dstBlackLevel[i]));
+
+    return std::make_tuple(dst, blackLevelResult, static_cast<unsigned short>(dstWhiteLevel));
 }
 
 std::shared_ptr<std::vector<char>> generateDng(
