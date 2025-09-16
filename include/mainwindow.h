@@ -66,6 +66,7 @@ private slots:
     void onRenderSettingsChanged(const Qt::CheckState &state);
     void onDraftModeQualityChanged(int index);
     void onSetCacheFolder(bool checked);
+    void onCameraModelChanged();
 
     void playFile(const QString& path);
     void openMountedDirectory(QWidget* fileWidget);
@@ -81,6 +82,7 @@ private:
     std::unique_ptr<motioncam::IFuseFileSystem> mFuseFilesystem;
     QList<motioncam::MountedFile> mMountedFiles;
     QString mCacheRootFolder;
+    QString mCustomCameraModel;
     int mDraftQuality;
 };
 

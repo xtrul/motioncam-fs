@@ -185,7 +185,8 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         LRUCache& lruCache,
         FileRenderOptions options,
         int draftScale,
-        const std::string& file) :
+        const std::string& file,
+        const std::string& customCameraModel) :
         mCache(lruCache),
         mIoThreadPool(ioThreadPool),
         mProcessingThreadPool(processingThreadPool),
@@ -198,7 +199,8 @@ VirtualFileSystemImpl_MCRAW::VirtualFileSystemImpl_MCRAW(
         mWidth(0),
         mHeight(0),
         mDraftScale(draftScale),
-        mOptions(options) {
+        mOptions(options),
+        mCustomCameraModel(customCameraModel) {
 
     init(options);
 }
@@ -244,7 +246,8 @@ void VirtualFileSystemImpl_MCRAW::init(FileRenderOptions options) {
         mFps,
         0,
         options,
-        getScaleFromOptions(options, mDraftScale));
+        getScaleFromOptions(options, mDraftScale),
+        mCustomCameraModel);
 
     mTypicalDngSize = dngData->size();
 
@@ -395,8 +398,9 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
 
     const auto fps = mFps;
     const auto draftScale = mDraftScale;
+    const auto customCameraModel = mCustomCameraModel;
 
-    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, pos, len, dst, result]() {
+    auto generateTask = [&options = mOptions, &cache = mCache, entry, sharableFuture, fps, draftScale, customCameraModel, pos, len, dst, result]() {
         size_t readBytes = 0;
         int errorCode = -1;
 
@@ -413,7 +417,8 @@ size_t VirtualFileSystemImpl_MCRAW::generateFrame(
                 fps,
                 frameIndex,
                 options,
-                getScaleFromOptions(options, draftScale));
+                getScaleFromOptions(options, draftScale),
+                customCameraModel);
 
             if(dngData && pos < dngData->size()) {
                 // Calculate length to copy
@@ -497,9 +502,10 @@ int VirtualFileSystemImpl_MCRAW::readFile(
     return -1;
 }
 
-void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale) {
+void VirtualFileSystemImpl_MCRAW::updateOptions(FileRenderOptions options, int draftScale, const std::string& customCameraModel) {
     mDraftScale = draftScale;
     mOptions = options;
+    mCustomCameraModel = customCameraModel;
 
     init(options);
 }

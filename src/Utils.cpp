@@ -413,7 +413,8 @@ std::shared_ptr<std::vector<char>> generateDng(
     float recordingFps,
     int frameNumber,
     FileRenderOptions options,
-    int scale)
+    int scale,
+    const std::string& customCameraModel)
 {
     Measure m("generateDng");
 
@@ -566,7 +567,12 @@ std::shared_ptr<std::vector<char>> generateDng(
     const auto software = "MotionCam Tools";
 
     dng.SetSoftware(software);
-    dng.SetUniqueCameraModel(cameraConfiguration.extraData.postProcessSettings.metadata.buildModel);
+
+    // Use custom camera model if provided, otherwise use metadata
+    const std::string& cameraModel = customCameraModel.empty()
+        ? cameraConfiguration.extraData.postProcessSettings.metadata.buildModel
+        : customCameraModel;
+    dng.SetUniqueCameraModel(cameraModel);
 
     // Set data
     dng.SetSubfileType();

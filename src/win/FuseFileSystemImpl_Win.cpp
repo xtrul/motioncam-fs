@@ -83,7 +83,7 @@ public:
     ~Session();
 
 public:
-    void updateOptions(FileRenderOptions options, int draftScale);
+    void updateOptions(FileRenderOptions options, int draftScale, const std::string& customCameraModel = "");
     FileInfo getFileInfo() const;
 
 protected:
@@ -159,12 +159,12 @@ Session::~Session() {
     Stop();
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale) {
+void Session::updateOptions(FileRenderOptions options, int draftScale, const std::string& customCameraModel) {
     mOptions = options;
     mDraftScale = draftScale;
 
     // Tell file system about new options
-    mFs->updateOptions(options, draftScale);
+    mFs->updateOptions(options, draftScale, customCameraModel);
 
     // We need to clear out the cache
     auto files = mFs->listFiles();
@@ -549,7 +549,7 @@ FuseFileSystemImpl_Win::FuseFileSystemImpl_Win() :
     setupLogging();
 }
 
-MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath) {
+MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath, const std::string& customCameraModel) {
     fs::path srcPath(srcFile);
     std::string extension = srcPath.extension().string();
 
@@ -559,7 +559,7 @@ MountId FuseFileSystemImpl_Win::mount(FileRenderOptions options, int draftScale,
         auto mountId = mNextMountId++;
 
         try {
-            auto fs = std::make_unique<VirtualFileSystemImpl_MCRAW>(*mIoThreadPool, *mProcessingThreadPool, *mCache, options, draftScale, srcFile);
+            auto fs = std::make_unique<VirtualFileSystemImpl_MCRAW>(*mIoThreadPool, *mProcessingThreadPool, *mCache, options, draftScale, srcFile, customCameraModel);
 
             mMountedFiles[mountId] = std::make_unique<Session>(dstPath, std::move(fs));
         }
@@ -581,13 +581,13 @@ void FuseFileSystemImpl_Win::unmount(MountId mountId) {
     mMountedFiles.erase(mountId);
 }
 
-void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
+void FuseFileSystemImpl_Win::updateOptions(MountId mountId, FileRenderOptions options, int draftScale, const std::string& customCameraModel) {
     auto it = mMountedFiles.find(mountId);
     if(it == mMountedFiles.end())
         return;
 
     dynamic_cast<Session*>(mMountedFiles[mountId].get())->updateOptions(
-        options, draftScale);
+        options, draftScale, customCameraModel);
 }
 
 std::optional<FileInfo> FuseFileSystemImpl_Win::getFileInfo(MountId mountId) {

@@ -65,6 +65,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->draftQuality, &QComboBox::currentIndexChanged, this, &MainWindow::onDraftModeQualityChanged);
 
     connect(ui->changeCacheBtn, &QPushButton::clicked, this, &MainWindow::onSetCacheFolder);
+    connect(ui->cameraModelComboBox, &QComboBox::currentTextChanged, this, &MainWindow::onCameraModelChanged);
 }
 
 MainWindow::~MainWindow() {
@@ -81,6 +82,7 @@ void MainWindow::saveSettings() {
     settings.setValue("scaleRaw", ui->scaleRawCheckBox->checkState() == Qt::CheckState::Checked);
     settings.setValue("cachePath", mCacheRootFolder);
     settings.setValue("draftQuality", mDraftQuality);
+    settings.setValue("customCameraModel", mCustomCameraModel);
 
     // Save mounted files
     settings.beginWriteArray("mountedFiles");
@@ -105,8 +107,9 @@ void MainWindow::restoreSettings() {
     ui->scaleRawCheckBox->setCheckState(
         settings.value("scaleRaw").toBool() ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
 
-    mCacheRootFolder = settings.value("cachePath").toString();    
+    mCacheRootFolder = settings.value("cachePath").toString();
     mDraftQuality = std::max(1, settings.value("draftQuality").toInt());
+    mCustomCameraModel = settings.value("customCameraModel").toString();
 
     if(mDraftQuality == 2)
         ui->draftQuality->setCurrentIndex(0);
@@ -114,6 +117,11 @@ void MainWindow::restoreSettings() {
         ui->draftQuality->setCurrentIndex(1);
     else if(mDraftQuality == 8)
         ui->draftQuality->setCurrentIndex(2);
+
+    // Restore camera model
+    if (!mCustomCameraModel.isEmpty()) {
+        ui->cameraModelComboBox->setCurrentText(mCustomCameraModel);
+    }
 
     // Restore mounted files
     auto size = settings.beginReadArray("mountedFiles");
@@ -183,7 +191,7 @@ void MainWindow::mountFile(const QString& filePath) {
 
     try {
         mountId = mFuseFilesystem->mount(
-            getRenderOptions(*ui), mDraftQuality, filePath.toStdString(), dstPath.toStdString());
+            getRenderOptions(*ui), mDraftQuality, filePath.toStdString(), dstPath.toStdString(), mCustomCameraModel.toStdString());
     }
     catch(std::runtime_error& e) {
         QMessageBox::critical(this, "Error", QString("There was an error mounting the file. (error: %1)").arg(e.what()));
@@ -412,7 +420,7 @@ void MainWindow::onRenderSettingsChanged(const Qt::CheckState &checkState) {
     updateUi();
 
     while(it != mMountedFiles.end()) {
-        mFuseFilesystem->updateOptions(it->mountId, renderOptions, mDraftQuality);
+        mFuseFilesystem->updateOptions(it->mountId, renderOptions, mDraftQuality, mCustomCameraModel.toStdString());
         ++it;
     }
 }
@@ -447,4 +455,16 @@ void MainWindow::onSetCacheFolder(bool checked) {
         ui->cacheFolderLabel->setText(mCacheRootFolder);
         ui->cacheFolderLabel->setStyleSheet("color: white; font-weight: bold; font-family: monospace;");
     }
+}
+
+void MainWindow::onCameraModelChanged() {
+    mCustomCameraModel = ui->cameraModelComboBox->currentText();
+
+    // If "Default (from metadata)" is selected, clear the custom model
+    if (mCustomCameraModel == "Default (from metadata)") {
+        mCustomCameraModel.clear();
+    }
+
+    // Update all mounted files with new camera model
+    onRenderSettingsChanged(Qt::CheckState::Checked);
 }

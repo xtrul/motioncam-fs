@@ -21,7 +21,8 @@ public:
         LRUCache& lruCache,
         FileRenderOptions options,
         int draftScale,
-        const std::string& file);
+        const std::string& file,
+        const std::string& customCameraModel = "");
 
     ~VirtualFileSystemImpl_MCRAW();
 
@@ -36,7 +37,7 @@ public:
         std::function<void(size_t, int)> result,
         bool async=true) override;
 
-    void updateOptions(FileRenderOptions options, int draftScale) override;
+    void updateOptions(FileRenderOptions options, int draftScale, const std::string& customCameraModel = "") override;
     
     FileInfo getFileInfo() const;
 
@@ -70,6 +71,7 @@ private:
     std::vector<uint8_t> mAudioFile;
     int mDraftScale;
     FileRenderOptions mOptions;
+    std::string mCustomCameraModel;
     float mFps;
     int mTotalFrames;
     int mDroppedFrames;

@@ -89,7 +89,7 @@ public:
     Session(const std::string& srcFile, const std::string& dstPath, VirtualFileSystemImpl_MCRAW* fs);
     ~Session();
 
-    void updateOptions(FileRenderOptions options, int draftScale);
+    void updateOptions(FileRenderOptions options, int draftScale, const std::string& customCameraModel = "");
     FileInfo getFileInfo() const;
 
 private:
@@ -206,8 +206,8 @@ void Session::init(VirtualFileSystemImpl_MCRAW* fs) {
 
 }
 
-void Session::updateOptions(FileRenderOptions options, int draftScale) {
-    mFs->updateOptions(options, draftScale);
+void Session::updateOptions(FileRenderOptions options, int draftScale, const std::string& customCameraModel) {
+    mFs->updateOptions(options, draftScale, customCameraModel);
 
     fuse_invalidate_path(mFuse, mDstPath.c_str());
 
@@ -387,7 +387,7 @@ FuseFileSystemImpl_MacOs::~FuseFileSystemImpl_MacOs() {
 }
 
 MountId FuseFileSystemImpl_MacOs::mount(
-    FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath)
+    FileRenderOptions options, int draftScale, const std::string& srcFile, const std::string& dstPath, const std::string& customCameraModel)
 {
     fs::path srcPath(srcFile);
     std::string extension = srcPath.extension().string();
@@ -420,7 +420,8 @@ MountId FuseFileSystemImpl_MacOs::mount(
                     *mCache,
                     options,
                     draftScale,
-                    srcFile);
+                    srcFile,
+                    customCameraModel);
 
             auto session = std::make_unique<Session>(srcFile, dstPath, fs);
 
@@ -453,10 +454,10 @@ void FuseFileSystemImpl_MacOs::unmount(MountId mountId) {
     }
 }
 
-void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale) {
+void FuseFileSystemImpl_MacOs::updateOptions(MountId mountId, FileRenderOptions options, int draftScale, const std::string& customCameraModel) {
     auto it = mMountedFiles.find(mountId);
     if(it != mMountedFiles.end()) {
-        it->second->updateOptions(options, draftScale);
+        it->second->updateOptions(options, draftScale, customCameraModel);
     }
 }
 
