@@ -171,7 +171,7 @@
            <item>
             <widget class="QCheckBox" name="draftModeCheckBox">
              <property name="text">
-              <string>Draft Mode</string>
+              <string>Proxy Mode</string>
              </property>
             </widget>
            </item>

@@ -383,7 +383,7 @@ void MainWindow::removeFile(QWidget* fileWidget) {
 }
 
 void MainWindow::updateUi() {
-    // Draft quality only enabled when draft mode is on
+    // Draft quality only enabled when proxy mode is on
     if(ui->draftModeCheckBox->checkState() == Qt::CheckState::Checked)
         ui->draftQuality->setEnabled(true);
     else
